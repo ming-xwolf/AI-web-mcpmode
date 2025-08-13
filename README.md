@@ -1,10 +1,10 @@
-# 🤖 MCP Web 智能助手 (WebwithMCP)
+# 🤖 MCP Web 智能助手 (AI-web-mcpmode)
 
 一个基于 **MCP (Model Context Protocol)** 的智能对话助手Web应用，支持实时聊天、工具调用和对话历史管理。
 
 > 📖 **多语言文档**: [English](README_EN.md) | [中文](README.md)
 
-[![GitHub Stars](https://img.shields.io/github/stars/guangxiangdebizi/WebwithMCP?style=social)](https://github.com/guangxiangdebizi/WebwithMCP)
+[![GitHub Stars](https://img.shields.io/github/stars/guangxiangdebizi/AI-web-mcpmode?style=social)](https://github.com/guangxiangdebizi/AI-web-mcpmode)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 
@@ -44,8 +44,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/guangxiangdebizi/WebwithMCP.git
-cd WebwithMCP
+git clone https://github.com/guangxiangdebizi/AI-web-mcpmode.git
+cd AI-web-mcpmode
 ```
 
 ### 2. 后端配置
@@ -138,7 +138,7 @@ python -m http.server 3000
 ## 📁 项目结构
 
 ```
-WebwithMCP/
+AI-web-mcpmode/
 ├── backend/                    # 后端代码
 │   ├── main.py                # FastAPI应用入口
 │   ├── mcp_agent.py           # MCP智能体核心逻辑
@@ -314,7 +314,7 @@ async def your_custom_function(self):
 
 如果您有任何问题或建议，欢迎联系：
 
-- **GitHub**: [guangxiangdebizi/WebwithMCP](https://github.com/guangxiangdebizi/WebwithMCP)
+- **GitHub**: [guangxiangdebizi/AI-web-mcpmode](https://github.com/guangxiangdebizi/AI-web-mcpmode)
 - **Email**: [guangxiangdebizi@gmail.com](mailto:guangxiangdebizi@gmail.com)
 - **LinkedIn**: [Xingyu Chen](https://www.linkedin.com/in/xingyu-chen-b5b3b0313/)
 

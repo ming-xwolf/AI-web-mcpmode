@@ -1,8 +1,8 @@
-# 🤖 MCP Web Assistant (WebwithMCP)
+# 🤖 MCP Web Assistant (AI-web-mcpmode)
 
 An intelligent conversational assistant web application based on **MCP (Model Context Protocol)**, supporting real-time chat, tool invocation, and conversation history management.
 
-[![GitHub Stars](https://img.shields.io/github/stars/guangxiangdebizi/WebwithMCP?style=social)](https://github.com/guangxiangdebizi/WebwithMCP)
+[![GitHub Stars](https://img.shields.io/github/stars/guangxiangdebizi/AI-web-mcpmode?style=social)](https://github.com/guangxiangdebizi/AI-web-mcpmode)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 
@@ -41,8 +41,8 @@ An intelligent conversational assistant web application based on **MCP (Model Co
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/guangxiangdebizi/WebwithMCP.git
-cd WebwithMCP
+git clone https://github.com/guangxiangdebizi/AI-web-mcpmode.git
+cd AI-web-mcpmode
 ```
 
 ### 2. Backend Configuration
@@ -135,7 +135,7 @@ python -m http.server 3000
 ## 📁 Project Structure
 
 ```
-WebwithMCP/
+AI-web-mcpmode/
 ├── backend/                    # Backend code
 │   ├── main.py                # FastAPI application entry
 │   ├── mcp_agent.py           # MCP agent core logic
@@ -312,7 +312,7 @@ We welcome all forms of contributions!
 
 If you have any questions or suggestions, feel free to contact:
 
-- **GitHub**: [guangxiangdebizi/WebwithMCP](https://github.com/guangxiangdebizi/WebwithMCP)
+- **GitHub**: [guangxiangdebizi/AI-web-mcpmode](https://github.com/guangxiangdebizi/AI-web-mcpmode)
 - **Email**: [guangxiangdebizi@gmail.com](mailto:guangxiangdebizi@gmail.com)
 - **LinkedIn**: [Xingyu Chen](https://www.linkedin.com/in/xingyu-chen-b5b3b0313/)
 
