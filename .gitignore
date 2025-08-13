@@ -1,0 +1,33 @@
+/man.py
+/test.py
+/~$日志-陈星宇-0714.docx
+/实习日志-陈星宇-0707.docx
+/实习日志-陈星宇-0714.docx
+/实习日志-陈星宇-0714.md
+/实习日志-陈星宇-0715.md
+/工作任务跟踪表-陈星宇-0707.csv
+/工作任务跟踪表-陈星宇-0714.csv
+/工作任务跟踪表-陈星宇-0715.csv
+实习日志-陈星宇-0715.docx
+~$日志-陈星宇-0715.docx
+实习日志-陈星宇-0718.md
+工作任务跟踪表-陈星宇-0718.csv
+backend/__pycache__/database.cpython-313.pyc
+backend/__pycache__/main.cpython-313.pyc
+backend/__pycache__/mcp_agent.cpython-313.pyc
+~$日志-陈星宇-0718.docx
+backend.zip
+实习日志-陈星宇-0718.docx
+frontend.zip
+.env
+# 忽略所有实习日志相关文件，防止上传
+实习日志*
+~$日志*
+/实习日志*
+/~$日志*
+*.md
+*.docx
+# 忽略所有工作任务跟踪表相关文件，防止上传
+工作任务跟踪表*
+/工作任务跟踪表*
+*.csv
