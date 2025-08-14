@@ -43,9 +43,18 @@ class ShareApp {
         try {
             this.showLoading('正在加载对话记录...');
             
-            const apiUrl = window.configManager.getFullApiUrl(`/api/share/${encodeURIComponent(this.sessionId)}`);
+            const timestamp = Date.now();
+            const apiUrl = window.configManager.getFullApiUrl(`/api/share/${encodeURIComponent(this.sessionId)}?t=${timestamp}`);
             
-            const response = await fetch(apiUrl);
+            let response;
+            try {
+                response = await fetch(apiUrl, { cache: 'no-store', mode: 'cors' });
+            } catch (e1) {
+                // 兜底同源相对路径（反代场景）
+                const fallbackUrl = `/api/share/${encodeURIComponent(this.sessionId)}?t=${timestamp}`;
+                console.warn('⚠️ 主地址请求失败，尝试同源兜底:', fallbackUrl, e1);
+                response = await fetch(fallbackUrl, { cache: 'no-store' });
+            }
             
             if (!response.ok) {
                 if (response.status === 404) {

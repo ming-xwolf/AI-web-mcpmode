@@ -47,15 +47,16 @@
                 const apiUrl = window.configManager.getFullApiUrl('/api/tools') + '?t=' + timestamp;
                 console.log('🔗 正在请求工具列表:', apiUrl);
                 
-                // 添加无缓存头
-                const response = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Cache-Control': 'no-cache, no-store, must-revalidate',
-                        'Pragma': 'no-cache',
-                        'Expires': '0'
-                    }
-                });
+                // 尽量避免触发预检请求，使用 cache 选项而不是自定义头
+                let response;
+                try {
+                    response = await fetch(apiUrl, { method: 'GET', cache: 'no-store', mode: 'cors' });
+                } catch (e1) {
+                    // 兜底：同源相对路径（适配反向代理场景）
+                    const fallbackUrl = `/api/tools?t=${timestamp}`;
+                    console.warn('⚠️ 主地址请求失败，尝试同源兜底:', fallbackUrl, e1);
+                    response = await fetch(fallbackUrl, { method: 'GET', cache: 'no-store' });
+                }
                 const result = await response.json();
                 
                 if (result.success) {

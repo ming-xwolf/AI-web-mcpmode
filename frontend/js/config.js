@@ -19,7 +19,8 @@ class ConfigManager {
     async _doLoadConfig() {
         try {
             console.log('📋 开始加载配置文件...');
-            const response = await fetch('./config.json');
+            // 加时间戳并禁止缓存，防止线上仍读到旧配置
+            const response = await fetch(`./config.json?t=${Date.now()}`, { cache: 'no-store' });
             
             if (!response.ok) {
                 throw new Error(`配置文件加载失败: HTTP ${response.status} ${response.statusText}`);
@@ -130,12 +131,17 @@ class ConfigManager {
     
     getApiBaseUrl() {
         this._ensureConfigLoaded();
-        
-        // 优先使用 api.baseUrl，否则构建地址
+        // 线上优先使用“当前页面域名 + 配置端口”，避免 host 配错
+        if (!this.isLocalDeployment()) {
+            const currentProto = window.location.protocol === 'https:' ? 'https' : 'http';
+            const currentHost = window.location.hostname;
+            const { port } = this.config.backend;
+            return `${currentProto}://${currentHost}:${port}`;
+        }
+        // 本地保留原规则
         if (this.config.api && this.config.api.baseUrl) {
             return this.config.api.baseUrl;
         }
-        
         const { protocol, host, port } = this.config.backend;
         return `${protocol}://${host}:${port}`;
     }

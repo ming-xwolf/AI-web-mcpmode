@@ -5,9 +5,9 @@
       "transport": "sse",
       "timeout": 600
     },
-    "medical-mcp": {
+    "paper-mcp": {
       "transport": "sse",
-      "url": "http://127.0.0.1:3101/sse",
+      "url": "http://127.0.0.1:3100/sse",
       "timeout": 60
     }
   }

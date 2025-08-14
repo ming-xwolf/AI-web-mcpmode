@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv, find_dotenv
+import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -61,6 +62,7 @@ class WebMCPAgent:
         # 新增：按服务器分组的工具存储
         self.tools_by_server = {}
         self.server_configs = {}
+        self._used_tool_names = set()
 
         # 加载 .env 并设置API环境变量（覆盖已存在的环境变量）
         try:
@@ -160,8 +162,24 @@ class WebMCPAgent:
                 try:
                     print(f"─── 正在从服务器 '{server_name}' 获取工具 ───")
                     server_tools = await self.mcp_client.get_tools(server_name=server_name)
-                    self.tools.extend(server_tools)
-                    self.tools_by_server[server_name] = server_tools
+                    # 对工具名做合法化与去重
+                    sanitized_tools = []
+                    for tool in server_tools:
+                        try:
+                            original_name = getattr(tool, 'name', '') or ''
+                            sanitized = self._sanitize_and_uniq_tool_name(original_name)
+                            if sanitized != original_name:
+                                print(f"🧹 规范化工具名: '{original_name}' -> '{sanitized}'")
+                                try:
+                                    tool.name = sanitized  # 覆盖名称，供后续绑定与匹配
+                                except Exception:
+                                    pass
+                            sanitized_tools.append(tool)
+                        except Exception as _e:
+                            print(f"⚠️ 工具名规范化失败，跳过: {getattr(tool,'name','<unknown>')} - {_e}")
+                            sanitized_tools.append(tool)
+                    self.tools.extend(sanitized_tools)
+                    self.tools_by_server[server_name] = sanitized_tools
                     print(f"✅ 从 {server_name} 获取到 {len(server_tools)} 个工具")
                 except Exception as e:
                     print(f"❌ 从服务器 '{server_name}' 获取工具失败: {e}")
@@ -176,11 +194,11 @@ class WebMCPAgent:
             print(f"✅ 成功连接，获取到 {len(self.tools)} 个工具")
             print(f"📊 服务器分组情况: {dict((name, len(tools)) for name, tools in self.tools_by_server.items())}")
 
-            # 绑定工具实例：用于判定与工具调用（非流式阶段）
+            # 创建双实例：
+            # 1) 带工具实例：用于判定与工具调用（非流式阶段）
             self.llm_tools = base_llm.bind_tools(self.tools)
 
-            # 非工具实例：用于最终回答真流式（确保不会产生 tool_calls 增量）
-            # 注意：不要绑定工具
+            # 2) 无工具实例：用于最终回答真流式（避免产生 tool_calls 增量）
             self.llm_stream = ChatOpenAI(
                 model=self.model_name,
                 temperature=self.temperature,
@@ -204,25 +222,6 @@ class WebMCPAgent:
                 except:
                     pass
             return False
-
-    def _get_system_prompt(self) -> str:
-        """获取系统提示词"""
-        now = datetime.now()
-        current_date = now.strftime("%Y年%m月%d日")
-        current_weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()]
-
-        return f"""你是一个智能助手，可以调用MCP工具来帮助用户完成各种任务。
-
-当前时间信息：
-📅 今天是：{current_date} ({current_weekday})
-
-工作原则：
-1. 仔细分析用户需求
-2. 选择合适的工具来完成任务
-3. 清楚地解释操作过程和结果
-4. 如果遇到问题，提供具体的解决建议
-
-请始终以用户需求为中心，高效地使用可用工具。"""
 
     def _get_tools_system_prompt(self) -> str:
         """用于工具判定/执行阶段的系统提示词：专注于是否需要调用工具与参数生成，不做正文分析输出。"""
@@ -250,6 +249,23 @@ class WebMCPAgent:
             "- 可以分条说明、给出结论、风险点与后续建议。\n"
         )
 
+    def _sanitize_and_uniq_tool_name(self, name: str) -> str:
+        """将工具名规范为 ^[a-zA-Z0-9_-]+$，并避免重名冲突。"""
+        if not isinstance(name, str):
+            name = str(name or "")
+        # 仅保留字母数字下划线和连字符，其余替换为下划线
+        sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+        if not sanitized:
+            sanitized = "tool"
+        base = sanitized
+        # 确保唯一
+        index = 1
+        while sanitized in self._used_tool_names:
+            index += 1
+            sanitized = f"{base}_{index}"
+        self._used_tool_names.add(sanitized)
+        return sanitized
+
     async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """流式探测 + 立即中断：
         - 先直接 astream 开流，短暂缓冲并检测 function_call/tool_call；
@@ -273,10 +289,9 @@ class WebMCPAgent:
             round_index = 0
             while round_index < max_rounds:
                 round_index += 1
-                print(f"🧠 第 {round_index} 轮推理 (双实例：工具判定 + 流式探测)...")
+                print(f"🧠 第 {round_index} 轮推理 (双实例：判定工具 + 纯流式回答)...")
 
-                # 2) 先用工具实例快速判定（非流式）：若有工具，直接走工具；若无工具，进入纯流式
-                # 工具判定：在工具系统提示下运行
+                # 2) 使用带工具的常驻实例做判定（非流式）
                 tools_messages = [{"role": "system", "content": self._get_tools_system_prompt()}] + shared_history
                 try:
                     resp_check = await self.llm_tools.ainvoke(tools_messages)
@@ -409,8 +424,56 @@ class WebMCPAgent:
                 yield {"type": "ai_response_end", "content": final_text}
                 return
 
-            # 轮次耗尽
-            yield {"type": "error", "content": f"达到最大推理轮数({max_rounds})，停止执行"}
+            # 轮次耗尽：不再报错，回退到最终回答的流式输出
+            print(f"⚠️ 达到最大推理轮数({max_rounds})，回退为直接生成最终回答（无工具）")
+            try:
+                buffered_text = ""
+                response_started = False
+                final_text = ""
+
+                loop = asyncio.get_event_loop()
+                start_t = loop.time()
+                buffer_window_seconds = 0.5
+                min_flush_chars = 60
+
+                stream_messages = [{"role": "system", "content": self._get_stream_system_prompt()}] + shared_history
+                async for event in self.llm_stream.astream_events(stream_messages, version="v1"):
+                    ev = event.get("event")
+                    if ev != "on_chat_model_stream":
+                        continue
+                    data = event.get("data", {})
+                    chunk = data.get("chunk")
+                    if chunk is None:
+                        continue
+
+                    try:
+                        content = getattr(chunk, 'content', None)
+                    except Exception:
+                        content = None
+                    if content:
+                        if not response_started:
+                            buffered_text += content
+                            time_elapsed = loop.time() - start_t
+                            if time_elapsed >= buffer_window_seconds or len(buffered_text) >= min_flush_chars:
+                                yield {"type": "ai_response_start", "content": "AI正在回复..."}
+                                yield {"type": "ai_response_chunk", "content": buffered_text}
+                                final_text += buffered_text
+                                buffered_text = ""
+                                response_started = True
+                        else:
+                            final_text += content
+                            yield {"type": "ai_response_chunk", "content": content}
+
+                if not response_started and buffered_text:
+                    yield {"type": "ai_response_start", "content": "AI正在回复..."}
+                    yield {"type": "ai_response_chunk", "content": buffered_text}
+                    final_text += buffered_text
+
+                yield {"type": "ai_response_end", "content": final_text}
+                return
+            except Exception as e:
+                print(f"❌ 回退流式输出失败: {e}")
+                yield {"type": "error", "content": f"达到最大推理轮数，且回退生成失败: {str(e)}"}
         except Exception as e:
             import traceback
             print(f"❌ chat_stream 异常: {e}")
