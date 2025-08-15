@@ -6,7 +6,7 @@ MCP智能体封装 - 为Web后端使用
 import os
 import json
 import asyncio
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -15,6 +15,8 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 # ─────────── 1. MCP配置管理 ───────────
 class MCPConfig:
@@ -63,6 +65,7 @@ class WebMCPAgent:
         self.tools_by_server = {}
         self.server_configs = {}
         self._used_tool_names = set()
+        self._exit_tool_name = "exit_tool_mode"
 
         # 加载 .env 并设置API环境变量（覆盖已存在的环境变量）
         try:
@@ -185,6 +188,27 @@ class WebMCPAgent:
                     print(f"❌ 从服务器 '{server_name}' 获取工具失败: {e}")
                     self.tools_by_server[server_name] = []
             
+            # 注入本地“退出工具模式”工具，供判定阶段显式退出
+            try:
+                class ExitToolArgs(BaseModel):
+                    reason: Optional[str] = Field(default=None, description="简短说明为何退出工具模式")
+
+                def exit_tool_impl(reason: Optional[str] = None) -> Dict[str, Any]:
+                    return {"status": "exit", "reason": reason or ""}
+
+                exit_tool = StructuredTool.from_function(
+                    func=exit_tool_impl,
+                    name=self._exit_tool_name,
+                    description="当你决定不再调用任何外部工具、应直接进入回答阶段时，调用此工具通知系统退出工具模式。",
+                    args_schema=ExitToolArgs,
+                )
+                self.tools.append(exit_tool)
+                # 分组到本地分组，便于前端展示
+                self.tools_by_server.setdefault("__local__", []).append(exit_tool)
+                print(f"🧰 已注入本地工具: {self._exit_tool_name}")
+            except Exception as e:
+                print(f"⚠️ 注入本地退出工具失败: {e}")
+
             # 验证工具来源，确保只有配置文件中的服务器
             print(f"🔍 配置的服务器: {list(self.server_configs.keys())}")
             print(f"🔍 实际获取到的工具数量: {len(self.tools)}")
@@ -235,6 +259,7 @@ class WebMCPAgent:
             "- 如果不需要工具，不要输出正文分析内容。\n"
             "- 参数必须是合法 JSON 字典（object），不要输出不完整的片段。\n"
             "- 不要输出面向用户的解释或分析，这个留给后续回答模型。\n"
+            f"- 若决定不再调用任何工具，请调用 {self._exit_tool_name}(reason?) 来显式退出工具模式，然后停止继续调用其他工具。\n"
         )
 
     def _get_stream_system_prompt(self) -> str:
@@ -300,6 +325,48 @@ class WebMCPAgent:
                     print(f"⚠️ 工具判定失败，退回纯流式：{e}")
                     tool_calls_check = None
 
+                # 调试：打印带工具判定阶段的LLM原始输出与工具调用建议
+                try:
+                    content_preview = getattr(resp_check, 'content', None)
+                    print("📝 工具判定阶段 LLM 输出(content):")
+                    print(content_preview if content_preview else "<empty>")
+
+                    serialized_calls = []
+                    if tool_calls_check:
+                        for tc in tool_calls_check:
+                            try:
+                                if isinstance(tc, dict):
+                                    fn = tc.get('function') or {}
+                                    serialized_calls.append({
+                                        "id": tc.get('id'),
+                                        "name": fn.get('name') or tc.get('name'),
+                                        "args_raw": fn.get('arguments') or tc.get('args'),
+                                    })
+                                else:
+                                    # 兼容对象形式
+                                    fn_obj = getattr(tc, 'function', None)
+                                    args_raw = getattr(tc, 'args', None)
+                                    if args_raw is None and fn_obj is not None:
+                                        try:
+                                            args_raw = getattr(fn_obj, 'arguments', None)
+                                        except Exception:
+                                            args_raw = None
+                                    serialized_calls.append({
+                                        "id": getattr(tc, 'id', None),
+                                        "name": getattr(tc, 'name', ''),
+                                        "args_raw": args_raw,
+                                    })
+                            except Exception as _e:
+                                serialized_calls.append({"$raw": str(tc)})
+
+                    print("🧩 工具判定阶段 tool_calls (标准化):")
+                    try:
+                        print(json.dumps(serialized_calls, ensure_ascii=False, indent=2))
+                    except Exception:
+                        print(str(serialized_calls))
+                except Exception as log_e:
+                    print(f"⚠️ 打印判定阶段输出失败: {log_e}")
+
                 if tool_calls_check:
                     yield {"type": "tool_plan", "content": f"AI决定调用 {len(tool_calls_check)} 个工具", "tool_count": len(tool_calls_check)}
                     # 写回assistant带tool_calls
@@ -313,6 +380,7 @@ class WebMCPAgent:
                         shared_history.append({"role": "assistant", "content": getattr(resp_check, 'content', None) or ""})
 
                     # 执行工具（非流式）
+                    exit_to_stream = False
                     for i, tool_call in enumerate(tool_calls_check, 1):
                         if isinstance(tool_call, dict):
                             tool_id = tool_call.get('id') or f"call_{i}"
@@ -351,12 +419,22 @@ class WebMCPAgent:
                             else:
                                 tool_result = await target_tool.ainvoke(parsed_args)
                                 yield {"type": "tool_end", "tool_id": tool_id, "tool_name": tool_name, "result": str(tool_result)}
+                                # 若为显式退出工具模式的工具，则标记并中断后续工具执行
+                                if tool_name == self._exit_tool_name:
+                                    exit_to_stream = True
+                                    # 将简短reason附加到日志
+                                    try:
+                                        print(f"🚪 收到退出工具模式指令: {parsed_args.get('reason', '')}")
+                                    except Exception:
+                                        pass
                         except Exception as e:
                             error_msg = f"工具执行出错: {e}"
                             print(f"❌ {error_msg}")
                             yield {"type": "tool_error", "tool_id": tool_id, "error": error_msg}
                             tool_result = f"错误: {error_msg}"
 
+                        # 始终追加 tool 消息，满足 OpenAI 函数调用协议要求
+                        # 对于退出工具模式，内容为简单状态，不影响后续回答质量
                         shared_history.append({
                             "role": "tool",
                             "tool_call_id": tool_id,
@@ -364,8 +442,63 @@ class WebMCPAgent:
                             "content": str(tool_result)
                         })
 
-                    # 工具后继续下一轮
-                    continue
+                        if exit_to_stream:
+                            break
+
+                    if exit_to_stream:
+                        # 立即进入最终回答的流式输出
+                        buffered_text = ""
+                        response_started = False
+                        final_text = ""
+
+                        loop = asyncio.get_event_loop()
+                        start_t = loop.time()
+                        buffer_window_seconds = 0.5
+                        min_flush_chars = 60
+
+                        try:
+                            stream_messages = [{"role": "system", "content": self._get_stream_system_prompt()}] + shared_history
+                            async for event in self.llm_stream.astream_events(stream_messages, version="v1"):
+                                ev = event.get("event")
+                                if ev != "on_chat_model_stream":
+                                    continue
+                                data = event.get("data", {})
+                                chunk = data.get("chunk")
+                                if chunk is None:
+                                    continue
+
+                                try:
+                                    content = getattr(chunk, 'content', None)
+                                except Exception:
+                                    content = None
+                                if content:
+                                    if not response_started:
+                                        buffered_text += content
+                                        time_elapsed = loop.time() - start_t
+                                        if time_elapsed >= buffer_window_seconds or len(buffered_text) >= min_flush_chars:
+                                            yield {"type": "ai_response_start", "content": "AI正在回复..."}
+                                            yield {"type": "ai_response_chunk", "content": buffered_text}
+                                            final_text += buffered_text
+                                            buffered_text = ""
+                                            response_started = True
+                                    else:
+                                        final_text += content
+                                        yield {"type": "ai_response_chunk", "content": content}
+                        except Exception as e:
+                            print(f"❌ 大模型流式生成失败: {e}")
+                            yield {"type": "error", "content": f"大模型流式生成失败: {str(e)}"}
+                            return
+
+                        if not response_started and buffered_text:
+                            yield {"type": "ai_response_start", "content": "AI正在回复..."}
+                            yield {"type": "ai_response_chunk", "content": buffered_text}
+                            final_text += buffered_text
+
+                        yield {"type": "ai_response_end", "content": final_text}
+                        return
+                    else:
+                        # 工具后继续下一轮
+                        continue
 
                 # 3) 无工具：用“无工具实例”做纯流式（不会产生 tool_calls 增量 → 无 pydantic 报错）
                 #    同时保留短暂缓冲，保证首屏稳定
