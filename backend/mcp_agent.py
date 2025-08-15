@@ -6,7 +6,7 @@ MCP智能体封装 - 为Web后端使用
 import os
 import json
 import asyncio
-from typing import Dict, List, Any, AsyncGenerator, Optional
+from typing import Dict, List, Any, AsyncGenerator
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -15,8 +15,6 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
 
 # ─────────── 1. MCP配置管理 ───────────
 class MCPConfig:
@@ -65,7 +63,7 @@ class WebMCPAgent:
         self.tools_by_server = {}
         self.server_configs = {}
         self._used_tool_names = set()
-        self._exit_tool_name = "exit_tool_mode"
+        # no special exit tool
 
         # 加载 .env 并设置API环境变量（覆盖已存在的环境变量）
         try:
@@ -188,26 +186,7 @@ class WebMCPAgent:
                     print(f"❌ 从服务器 '{server_name}' 获取工具失败: {e}")
                     self.tools_by_server[server_name] = []
             
-            # 注入本地“退出工具模式”工具，供判定阶段显式退出
-            try:
-                class ExitToolArgs(BaseModel):
-                    reason: Optional[str] = Field(default=None, description="简短说明为何退出工具模式")
-
-                def exit_tool_impl(reason: Optional[str] = None) -> Dict[str, Any]:
-                    return {"status": "exit", "reason": reason or ""}
-
-                exit_tool = StructuredTool.from_function(
-                    func=exit_tool_impl,
-                    name=self._exit_tool_name,
-                    description="当你决定不再调用任何外部工具、应直接进入回答阶段时，调用此工具通知系统退出工具模式。",
-                    args_schema=ExitToolArgs,
-                )
-                self.tools.append(exit_tool)
-                # 分组到本地分组，便于前端展示
-                self.tools_by_server.setdefault("__local__", []).append(exit_tool)
-                print(f"🧰 已注入本地工具: {self._exit_tool_name}")
-            except Exception as e:
-                print(f"⚠️ 注入本地退出工具失败: {e}")
+            # 不注入本地退出工具
 
             # 验证工具来源，确保只有配置文件中的服务器
             print(f"🔍 配置的服务器: {list(self.server_configs.keys())}")
@@ -259,7 +238,6 @@ class WebMCPAgent:
             "- 如果不需要工具，不要输出正文分析内容。\n"
             "- 参数必须是合法 JSON 字典（object），不要输出不完整的片段。\n"
             "- 不要输出面向用户的解释或分析，这个留给后续回答模型。\n"
-            f"- 若决定不再调用任何工具，请调用 {self._exit_tool_name}(reason?) 来显式退出工具模式，然后停止继续调用其他工具。\n"
         )
 
     def _get_stream_system_prompt(self) -> str:
@@ -368,20 +346,21 @@ class WebMCPAgent:
                     print(f"⚠️ 打印判定阶段输出失败: {log_e}")
 
                 if tool_calls_check:
-                    yield {"type": "tool_plan", "content": f"AI决定调用 {len(tool_calls_check)} 个工具", "tool_count": len(tool_calls_check)}
+                    tool_calls_to_run = tool_calls_check
+                    yield {"type": "tool_plan", "content": f"AI决定调用 {len(tool_calls_to_run)} 个工具", "tool_count": len(tool_calls_to_run)}
                     # 写回assistant带tool_calls
                     try:
                         shared_history.append({
                             "role": "assistant",
                             "content": getattr(resp_check, 'content', None) or "",
-                            "tool_calls": tool_calls_check
+                            "tool_calls": tool_calls_to_run
                         })
                     except Exception:
                         shared_history.append({"role": "assistant", "content": getattr(resp_check, 'content', None) or ""})
 
                     # 执行工具（非流式）
                     exit_to_stream = False
-                    for i, tool_call in enumerate(tool_calls_check, 1):
+                    for i, tool_call in enumerate(tool_calls_to_run, 1):
                         if isinstance(tool_call, dict):
                             tool_id = tool_call.get('id') or f"call_{i}"
                             fn = tool_call.get('function') or {}
@@ -403,7 +382,7 @@ class WebMCPAgent:
                         else:
                             parsed_args = {"$raw": str(tool_args_raw)}
 
-                        yield {"type": "tool_start", "tool_id": tool_id, "tool_name": tool_name, "tool_args": parsed_args, "progress": f"{i}/{len(tool_calls_check)}"}
+                        yield {"type": "tool_start", "tool_id": tool_id, "tool_name": tool_name, "tool_args": parsed_args, "progress": f"{i}/{len(tool_calls_to_run)}"}
 
                         try:
                             target_tool = None
@@ -419,14 +398,7 @@ class WebMCPAgent:
                             else:
                                 tool_result = await target_tool.ainvoke(parsed_args)
                                 yield {"type": "tool_end", "tool_id": tool_id, "tool_name": tool_name, "result": str(tool_result)}
-                                # 若为显式退出工具模式的工具，则标记并中断后续工具执行
-                                if tool_name == self._exit_tool_name:
-                                    exit_to_stream = True
-                                    # 将简短reason附加到日志
-                                    try:
-                                        print(f"🚪 收到退出工具模式指令: {parsed_args.get('reason', '')}")
-                                    except Exception:
-                                        pass
+                                # 不再支持退出工具模式
                         except Exception as e:
                             error_msg = f"工具执行出错: {e}"
                             print(f"❌ {error_msg}")
@@ -446,56 +418,8 @@ class WebMCPAgent:
                             break
 
                     if exit_to_stream:
-                        # 立即进入最终回答的流式输出
-                        buffered_text = ""
-                        response_started = False
-                        final_text = ""
-
-                        loop = asyncio.get_event_loop()
-                        start_t = loop.time()
-                        buffer_window_seconds = 0.5
-                        min_flush_chars = 60
-
-                        try:
-                            stream_messages = [{"role": "system", "content": self._get_stream_system_prompt()}] + shared_history
-                            async for event in self.llm_stream.astream_events(stream_messages, version="v1"):
-                                ev = event.get("event")
-                                if ev != "on_chat_model_stream":
-                                    continue
-                                data = event.get("data", {})
-                                chunk = data.get("chunk")
-                                if chunk is None:
-                                    continue
-
-                                try:
-                                    content = getattr(chunk, 'content', None)
-                                except Exception:
-                                    content = None
-                                if content:
-                                    if not response_started:
-                                        buffered_text += content
-                                        time_elapsed = loop.time() - start_t
-                                        if time_elapsed >= buffer_window_seconds or len(buffered_text) >= min_flush_chars:
-                                            yield {"type": "ai_response_start", "content": "AI正在回复..."}
-                                            yield {"type": "ai_response_chunk", "content": buffered_text}
-                                            final_text += buffered_text
-                                            buffered_text = ""
-                                            response_started = True
-                                    else:
-                                        final_text += content
-                                        yield {"type": "ai_response_chunk", "content": content}
-                        except Exception as e:
-                            print(f"❌ 大模型流式生成失败: {e}")
-                            yield {"type": "error", "content": f"大模型流式生成失败: {str(e)}"}
-                            return
-
-                        if not response_started and buffered_text:
-                            yield {"type": "ai_response_start", "content": "AI正在回复..."}
-                            yield {"type": "ai_response_chunk", "content": buffered_text}
-                            final_text += buffered_text
-
-                        yield {"type": "ai_response_end", "content": final_text}
-                        return
+                        # 不再支持提前强制切流式，按原逻辑继续下一轮
+                        pass
                     else:
                         # 工具后继续下一轮
                         continue
