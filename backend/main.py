@@ -135,6 +135,35 @@ manager = ConnectionManager()
 async def websocket_chat(websocket: WebSocket):
     """WebSocket聊天接口"""
     session_id = await manager.connect(websocket)
+    # 从连接查询参数中读取 msid 并保存到会话上下文（后端隐藏使用，不回传给前端）
+    try:
+        print(f"🔍 WebSocket 查询参数: {dict(websocket.query_params)}")
+        msid_param = websocket.query_params.get("msid")
+        print(f"🔍 提取的 msid 参数: {msid_param}")
+        if msid_param is not None and msid_param != "":
+            try:
+                msid_value = int(msid_param)
+                if not hasattr(mcp_agent, 'session_contexts'):
+                    mcp_agent.session_contexts = {}
+                mcp_agent.session_contexts[session_id] = {"msid": msid_value}
+                print(f"🔐 已为会话 {session_id} 记录 msid={msid_value}")
+                print(f"🔍 当前所有会话上下文: {mcp_agent.session_contexts}")
+            except Exception as e:
+                print(f"⚠️ 解析 msid 失败: {e}")
+                # 非法 msid 忽略
+                if not hasattr(mcp_agent, 'session_contexts'):
+                    mcp_agent.session_contexts = {}
+                mcp_agent.session_contexts[session_id] = {}
+        else:
+            print(f"⚠️ msid 参数为空或不存在")
+            if not hasattr(mcp_agent, 'session_contexts'):
+                mcp_agent.session_contexts = {}
+            mcp_agent.session_contexts[session_id] = {}
+    except Exception as _e:
+        print(f"❌ 处理 msid 参数异常: {_e}")
+        if not hasattr(mcp_agent, 'session_contexts'):
+            mcp_agent.session_contexts = {}
+        mcp_agent.session_contexts[session_id] = {}
     
     try:
         while True:
@@ -176,7 +205,7 @@ async def websocket_chat(websocket: WebSocket):
 
                     # 流式处理并推送AI响应
                     try:
-                        async for response_chunk in mcp_agent.chat_stream(user_input, history=history):
+                        async for response_chunk in mcp_agent.chat_stream(user_input, history=history, session_id=current_session_id):
                             # 转发给客户端
                             await manager.send_personal_message(response_chunk, websocket)
                             

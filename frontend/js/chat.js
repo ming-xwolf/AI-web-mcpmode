@@ -23,7 +23,7 @@ class ChatApp {
     async init() {
         try {
             // 首先确保配置已加载
-            this.showLoading('正在加载配置文件...');
+            this.showLoading('正在加载配置...');
             
             if (!window.configManager.isLoaded) {
                 await window.configManager.loadConfig();
@@ -107,7 +107,7 @@ class ChatApp {
     }
     
     async connectWebSocket() {
-        this.showLoading('正在连接服务器...');
+        this.showLoading('Connecting to server...');
         this.updateConnectionStatus('connecting');
         await this.wsManager.connect();
     }
@@ -148,8 +148,8 @@ class ChatApp {
             case 'tool_plan':
                 this.thinkingFlow.updateThinkingStage(
                     'tools_planned', 
-                    `决定使用 ${data.tool_count} 个工具`, 
-                    '准备执行工具调用...',
+                    `计划使用 ${data.tool_count} 个工具`, 
+                    '正在准备数据处理...',
                     { toolCount: data.tool_count }
                 );
                 break;
@@ -167,7 +167,7 @@ class ChatApp {
                 break;
                 
             case 'ai_response_start':
-                this.thinkingFlow.updateThinkingStage('responding', '准备回答', '正在整理回复内容...');
+                this.thinkingFlow.updateThinkingStage('responding', '生成回复', '正在整理结论和建议...');
                 
                 // 确保思维流可见 - 滚动到思维流位置
                 const currentFlow = this.thinkingFlow.getCurrentFlow();
@@ -232,7 +232,7 @@ class ChatApp {
         });
         
         if (!success) {
-            this.showError('发送消息失败，请检查网络连接');
+            this.showError('发送失败，请检查网络连接');
             this.thinkingFlow.completeThinkingFlow('error');
         }
     }
@@ -250,7 +250,7 @@ class ChatApp {
                 renderedContent = this.escapeHtml(content);
             }
         } catch (error) {
-            console.warn('用户消息Markdown渲染错误:', error);
+            console.warn('User message Markdown rendering error:', error);
             renderedContent = this.escapeHtml(content);
         }
         
@@ -548,7 +548,7 @@ class ChatApp {
         });
     }
     
-    showLoading(text = '加载中...') {
+    showLoading(text = 'Loading...') {
         this.loadingOverlay.style.display = 'flex';
         this.loadingOverlay.querySelector('div').textContent = text;
     }

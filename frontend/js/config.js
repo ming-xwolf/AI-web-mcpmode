@@ -18,12 +18,12 @@ class ConfigManager {
     
     async _doLoadConfig() {
         try {
-            console.log('📋 开始加载配置文件...');
+            console.log('📋 Starting to load config file...');
             // 加时间戳并禁止缓存，防止线上仍读到旧配置
             const response = await fetch(`./config.json?t=${Date.now()}`, { cache: 'no-store' });
             
             if (!response.ok) {
-                throw new Error(`配置文件加载失败: HTTP ${response.status} ${response.statusText}`);
+                throw new Error(`Config file load failed: HTTP ${response.status} ${response.statusText}`);
             }
             
             this.config = await response.json();
@@ -32,47 +32,47 @@ class ConfigManager {
             // 验证配置完整性
             this._validateConfig();
             
-            console.log('✅ 配置文件加载成功:', this.config);
+            console.log('✅ Config file loaded successfully:', this.config);
             return this.config;
         } catch (error) {
             this.config = null;
             this.isLoaded = false;
-            console.error('❌ 配置文件加载失败:', error);
+            console.error('❌ Config file load failed:', error);
             
-            // 显示用户友好的错误信息
+            // Show user-friendly error message
             this._showConfigError(error.message);
-            throw new Error(`配置加载失败: ${error.message}`);
+            throw new Error(`Config load failed: ${error.message}`);
         }
     }
     
     _validateConfig() {
         if (!this.config) {
-            throw new Error('配置对象为空');
+            throw new Error('Config object is empty');
         }
         
         if (!this.config.backend) {
-            throw new Error('配置文件缺少 backend 配置');
+            throw new Error('Config file missing backend configuration');
         }
         
         const { host, port, protocol, wsProtocol } = this.config.backend;
         
         if (!host) {
-            throw new Error('配置文件缺少 backend.host');
+            throw new Error('Config file missing backend.host');
         }
         
         if (!port) {
-            throw new Error('配置文件缺少 backend.port');
+            throw new Error('Config file missing backend.port');
         }
         
         if (!protocol) {
-            throw new Error('配置文件缺少 backend.protocol');
+            throw new Error('Config file missing backend.protocol');
         }
         
         if (!wsProtocol) {
-            throw new Error('配置文件缺少 backend.wsProtocol');
+            throw new Error('Config file missing backend.wsProtocol');
         }
         
-        console.log('✅ 配置文件验证通过');
+        console.log('✅ Config file validation passed');
     }
     
     _showConfigError(message) {
@@ -99,9 +99,9 @@ class ConfigManager {
                     max-width: 500px;
                     text-align: center;
                 ">
-                    <h2>⚠️ 配置文件加载失败</h2>
+                    <h2>⚠️ Config File Load Failed</h2>
                     <p>${message}</p>
-                    <p><strong>请检查 config.json 文件是否存在且格式正确！</strong></p>
+                    <p><strong>Please check if config.json file exists and format is correct!</strong></p>
                     <button onclick="window.location.reload()" style="
                         background: white;
                         color: #f56565;
@@ -111,7 +111,7 @@ class ConfigManager {
                         cursor: pointer;
                         font-weight: bold;
                         margin-top: 15px;
-                    ">重新加载</button>
+                    ">Reload</button>
                 </div>
             </div>
         `;
@@ -125,7 +125,7 @@ class ConfigManager {
     // 确保配置已加载的检查方法
     _ensureConfigLoaded() {
         if (!this.isLoaded || !this.config) {
-            throw new Error('配置文件未加载，请先调用 loadConfig() 方法');
+            throw new Error('Config file not loaded, please call loadConfig() method first');
         }
     }
     

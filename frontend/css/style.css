@@ -620,6 +620,9 @@ body {
     border-radius: 1rem;
     padding: 0.75rem 1rem;
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     border: 1px solid #e2e8f0;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     /* 确保输入框容器不会被压缩 */
@@ -645,7 +648,7 @@ body {
     max-height: 120px;
     padding: 0;
     width: 100%;
-    padding-right: 56px; /* space for button */
+    padding-right: 0; /* 按钮并排显示时不需要预留空间 */
     font-family: inherit;
     color: #2d3748;
     /* 确保长文本可以正确换行 */
@@ -675,9 +678,8 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
-    position: absolute;
-    right: 1rem;
-    bottom: 0.75rem;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -808,14 +810,15 @@ body {
     }
     
     .chat-input-wrapper {
-        flex-direction: column;
-        gap: 0.75rem;
+        flex-direction: row; /* 保持与输入框同一行 */
+        gap: 0.5rem;
     }
-    
+
     .send-btn {
-        align-self: flex-end;
-        width: auto;
-        padding: 0.75rem 1.5rem;
+        align-self: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
         border-radius: 0.75rem;
     }
     

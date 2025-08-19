@@ -58,7 +58,7 @@ class ThinkingFlow {
         thinkingStage.className = 'thinking-stage active';
         thinkingStage.setAttribute('data-stage', thinkingStageId);
         
-        const stageTitle = iteration ? `第${iteration}轮推理` : 'AI 分析思考';
+        const stageTitle = iteration ? `思考步骤 #${iteration}` : 'AI 分析';
         
         thinkingStage.innerHTML = `
             <div class="stage-icon">
@@ -66,7 +66,7 @@ class ThinkingFlow {
             </div>
             <div class="stage-content">
                 <div class="stage-title">${stageTitle}</div>
-                <div class="stage-detail">正在分析和制定解决方案...</div>
+                <div class="stage-detail">正在分析问题并制定解决方案...</div>
                 <div class="thinking-content">
                     <div class="ai-thinking-text">
                         <span class="thinking-cursor">▋</span>
@@ -209,7 +209,7 @@ class ThinkingFlow {
             thinkingText.textContent = '思考完成';
             flowHeader.classList.add('completed');
         } else {
-            thinkingText.textContent = '处理出错';
+            thinkingText.textContent = '处理错误';
             flowHeader.classList.add('error');
         }
 
@@ -236,7 +236,7 @@ class ThinkingFlow {
                 </div>
                 <div class="tool-info">
                     <div class="tool-name">${this.appInstance.escapeHtml(data.tool_name)}</div>
-                    <div class="tool-progress">准备执行</div>
+                    <div class="tool-progress">正在准备执行</div>
                 </div>
             </div>
         `;
@@ -259,7 +259,7 @@ class ThinkingFlow {
 
         if (status === 'completed') {
             statusIcon = '<span class="tool-check">✓</span>';
-            statusText = '执行完成';
+            statusText = '已完成';
             
             // 添加结果显示
             const resultContent = this.formatToolResult(data.result);
@@ -273,7 +273,7 @@ class ThinkingFlow {
                     ${isLongContent ? `
                         <button class="tool-result-toggle" onclick="${this.appName}.thinkingFlow.toggleToolResult('${data.tool_id}')">
                             <span class="toggle-icon">▶</span>
-                            <span>展开</span>
+                            <span>Expand</span>
                         </button>
                     ` : ''}
                 </div>
@@ -284,7 +284,7 @@ class ThinkingFlow {
 
         } else if (status === 'error') {
             statusIcon = '<span class="tool-error">✗</span>';
-            statusText = '执行失败';
+            statusText = '失败';
             resultSection = `<div class="tool-result-content error-text">${this.appInstance.escapeHtml(data.error)}</div>`;
         }
         
@@ -315,7 +315,7 @@ class ThinkingFlow {
         const completedTools = toolsContainer.querySelectorAll('.thinking-tool.completed, .thinking-tool.error');
         
         if (allTools.length > 0 && allTools.length === completedTools.length) {
-            this.updateThinkingStage('tools_completed', '工具执行完成', '正在处理结果，准备回答...');
+            this.updateThinkingStage('tools_completed', '工具执行完成', '正在整理结果并准备回复...');
         }
     }
 
@@ -364,13 +364,13 @@ class ThinkingFlow {
             toggleText.textContent = '展开';
         } else {
             toggleIcon.textContent = '▼';
-            toggleText.textContent = '收起';
+            toggleText.textContent = '折叠';
         }
     }
 
     // 格式化数据大小显示
     formatDataSize(bytes) {
-        if (bytes < 1024) return bytes + ' 字符';
+        if (bytes < 1024) return bytes + ' 个字符';
         const kb = (bytes / 1024).toFixed(2);
         return `${kb} KB`;
     }

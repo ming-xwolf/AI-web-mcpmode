@@ -15,7 +15,7 @@ class ShareModule {
     
     shareChat() {
         if (!this.chatApp.sessionId) {
-            this.chatApp.showError('无法分享：当前没有活跃的对话会话');
+            this.chatApp.showError('无法分享：没有活跃的对话会话');
             return;
         }
         
@@ -43,11 +43,11 @@ class ShareModule {
                         <button class="share-copy-btn">复制</button>
                     </div>
                     <div class="share-notice">
-                        <p><strong>注意事项：</strong></p>
+                        <p><strong>注意：</strong></p>
                         <ul>
-                            <li>分享的对话为只读模式，其他人无法在此基础上继续对话</li>
+                            <li>共享的对话为只读模式，他人无法继续对话</li>
                             <li>请确保对话内容不包含敏感信息</li>
-                            <li>分享链接包含完整的对话历史记录</li>
+                            <li>分享链接包含完整的对话历史</li>
                         </ul>
                     </div>
                 </div>

@@ -6,7 +6,7 @@ MCP智能体封装 - 为Web后端使用
 import os
 import json
 import asyncio
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -15,6 +15,9 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
+import contextvars
 
 # ─────────── 1. MCP配置管理 ───────────
 class MCPConfig:
@@ -56,14 +59,12 @@ class WebMCPAgent:
         self.config = MCPConfig(str(config_path))
         self.llm = None
         self.llm_tools = None  # 绑定工具用于判定与工具阶段
-        self.llm_stream = None # 不绑定工具，仅用于最终回答的真流式
         self.mcp_client = None
         self.tools = []
         # 新增：按服务器分组的工具存储
         self.tools_by_server = {}
         self.server_configs = {}
         self._used_tool_names = set()
-        # no special exit tool
 
         # 加载 .env 并设置API环境变量（覆盖已存在的环境变量）
         try:
@@ -93,6 +94,12 @@ class WebMCPAgent:
         if self.base_url and not os.getenv("OPENAI_BASE_URL"):
             os.environ["OPENAI_BASE_URL"] = self.base_url
 
+        # 会话上下文（存放每个 session 的数据等）
+        self.session_contexts: Dict[str, Dict[str, Any]] = {}
+
+        # 当前会话ID上下文变量（用于工具在运行时识别会话）
+        self._current_session_id_ctx: contextvars.ContextVar = contextvars.ContextVar("current_session_id", default=None)
+
     async def initialize(self):
         """初始化智能体"""
         try:
@@ -114,9 +121,10 @@ class WebMCPAgent:
             mcp_config = self.config.load_config()
             self.server_configs = mcp_config.get("servers", {})
 
+            # 允许没有外部MCP服务器
             if not self.server_configs:
-                print("❌ 没有配置MCP服务器")
-                return False
+                print("⚠️ 未配置外部MCP服务器，仅提供基础对话功能")
+                self.server_configs = {}
 
             print("🔗 正在连接MCP服务器...")
             
@@ -186,7 +194,8 @@ class WebMCPAgent:
                     print(f"❌ 从服务器 '{server_name}' 获取工具失败: {e}")
                     self.tools_by_server[server_name] = []
             
-            # 不注入本地退出工具
+            # 本地医疗数据工具已移除，只使用 mcp.json 配置的外部工具
+            print("ℹ️ 本地医疗数据工具未启用，仅使用 mcp.json 配置的外部工具")
 
             # 验证工具来源，确保只有配置文件中的服务器
             print(f"🔍 配置的服务器: {list(self.server_configs.keys())}")
@@ -197,17 +206,8 @@ class WebMCPAgent:
             print(f"✅ 成功连接，获取到 {len(self.tools)} 个工具")
             print(f"📊 服务器分组情况: {dict((name, len(tools)) for name, tools in self.tools_by_server.items())}")
 
-            # 创建双实例：
-            # 1) 带工具实例：用于判定与工具调用（非流式阶段）
+            # 创建工具判定实例（绑定工具，仅用于是否需要工具与参数生成）
             self.llm_tools = base_llm.bind_tools(self.tools)
-
-            # 2) 无工具实例：用于最终回答真流式（避免产生 tool_calls 增量）
-            self.llm_stream = ChatOpenAI(
-                model=self.model_name,
-                temperature=self.temperature,
-                timeout=self.timeout,
-                max_retries=3,
-            )
 
             print("🤖 Web MCP智能助手已启动！")
             return True
@@ -227,30 +227,22 @@ class WebMCPAgent:
             return False
 
     def _get_tools_system_prompt(self) -> str:
-        """用于工具判定/执行阶段的系统提示词：专注于是否需要调用工具与参数生成，不做正文分析输出。"""
+        """用于工具判定/执行阶段的系统提示词：通用助手风格"""
         now = datetime.now()
         current_date = now.strftime("%Y年%m月%d日")
         current_weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()]
         return (
-            f"今天是 {current_date}（{current_weekday}）。你是一个‘工具调度器’。\n"
-            "- 你的目标是判断是否需要调用工具，并给出准确的工具名称和参数（JSON）。\n"
-            "- 如果需要，请通过 tool_calls 结构体给出函数名与有效的 JSON 参数。\n"
-            "- 如果不需要工具，不要输出正文分析内容。\n"
-            "- 参数必须是合法 JSON 字典（object），不要输出不完整的片段。\n"
-            "- 不要输出面向用户的解释或分析，这个留给后续回答模型。\n"
+            f"今天是 {current_date}（{current_weekday}）。你是一个有用、无害、诚实的AI助手。\n"
+            "- 你可以使用可用的工具来帮助用户解决问题。\n"
+            "- 当用户的问题需要获取实时信息、执行特定操作或使用外部服务时，请使用合适的工具。\n"
+            "- 对于一般性问题、知识性问题或不需要工具的问题，请直接回答。\n"
+            "- 如果决定使用工具，请只输出 tool_calls，不要同时输出自然语言回答。\n"
+            "- 如果决定不使用工具，请提供有帮助的中文回答。\n"
         )
 
     def _get_stream_system_prompt(self) -> str:
-        """用于最终回答阶段的系统提示词：专注于面向用户的分析与生成，不触发工具调用。"""
-        now = datetime.now()
-        current_date = now.strftime("%Y年%m月%d日")
-        current_weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()]
-        return (
-            f"今天是 {current_date}（{current_weekday}）。你是一个回答助手。\n"
-            "- 专注于清晰、结构化的中文回答与分析。\n"
-            "- 不要调用或提及任何工具或函数。\n"
-            "- 可以分条说明、给出结论、风险点与后续建议。\n"
-        )
+        """保持接口以兼容旧调用，但当前不再使用流式回答提示词。"""
+        return ""
 
     def _sanitize_and_uniq_tool_name(self, name: str) -> str:
         """将工具名规范为 ^[a-zA-Z0-9_-]+$，并避免重名冲突。"""
@@ -269,13 +261,18 @@ class WebMCPAgent:
         self._used_tool_names.add(sanitized)
         return sanitized
 
-    async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """流式探测 + 立即中断：
         - 先直接 astream 开流，短暂缓冲并检测 function_call/tool_call；
         - 若检测到工具调用：立即中断本次流式（不下发缓冲），执行工具（非流式），写回 messages 后进入下一轮；
         - 若未检测到工具：将本次流作为最终回答，开始流式推送到结束。
         """
         try:
+            if session_id:
+                try:
+                    self._current_session_id_ctx.set(session_id)
+                except Exception:
+                    pass
             print(f"🤖 开始处理用户输入: {user_input[:50]}...")
             yield {"type": "status", "content": "开始生成..."}
 
@@ -288,75 +285,71 @@ class WebMCPAgent:
                         shared_history.append({"role": "assistant", "content": record['ai_response']})
             shared_history.append({"role": "user", "content": user_input})
 
-            max_rounds = 5
+            max_rounds = 25
             round_index = 0
             while round_index < max_rounds:
                 round_index += 1
                 print(f"🧠 第 {round_index} 轮推理 (双实例：判定工具 + 纯流式回答)...")
 
-                # 2) 使用带工具的常驻实例做判定（非流式）
+                # 2) 使用带工具实例做"流式判定"：
                 tools_messages = [{"role": "system", "content": self._get_tools_system_prompt()}] + shared_history
+                tool_calls_check = None
+                buffered_chunks: List[str] = []
+                content_preview = ""
+                response_started = False
                 try:
-                    resp_check = await self.llm_tools.ainvoke(tools_messages)
-                    tool_calls_check = getattr(resp_check, 'tool_calls', None)
-                except Exception as e:
-                    print(f"⚠️ 工具判定失败，退回纯流式：{e}")
-                    tool_calls_check = None
-
-                # 调试：打印带工具判定阶段的LLM原始输出与工具调用建议
-                try:
-                    content_preview = getattr(resp_check, 'content', None)
-                    print("📝 工具判定阶段 LLM 输出(content):")
-                    print(content_preview if content_preview else "<empty>")
-
-                    serialized_calls = []
-                    if tool_calls_check:
-                        for tc in tool_calls_check:
+                    async for event in self.llm_tools.astream_events(tools_messages, version="v1"):
+                        ev = event.get("event")
+                        if ev == "on_chat_model_stream":
+                            data = event.get("data", {})
+                            chunk = data.get("chunk")
+                            if chunk is None:
+                                continue
                             try:
-                                if isinstance(tc, dict):
-                                    fn = tc.get('function') or {}
-                                    serialized_calls.append({
-                                        "id": tc.get('id'),
-                                        "name": fn.get('name') or tc.get('name'),
-                                        "args_raw": fn.get('arguments') or tc.get('args'),
-                                    })
-                                else:
-                                    # 兼容对象形式
-                                    fn_obj = getattr(tc, 'function', None)
-                                    args_raw = getattr(tc, 'args', None)
-                                    if args_raw is None and fn_obj is not None:
-                                        try:
-                                            args_raw = getattr(fn_obj, 'arguments', None)
-                                        except Exception:
-                                            args_raw = None
-                                    serialized_calls.append({
-                                        "id": getattr(tc, 'id', None),
-                                        "name": getattr(tc, 'name', ''),
-                                        "args_raw": args_raw,
-                                    })
-                            except Exception as _e:
-                                serialized_calls.append({"$raw": str(tc)})
-
-                    print("🧩 工具判定阶段 tool_calls (标准化):")
-                    try:
-                        print(json.dumps(serialized_calls, ensure_ascii=False, indent=2))
-                    except Exception:
-                        print(str(serialized_calls))
-                except Exception as log_e:
-                    print(f"⚠️ 打印判定阶段输出失败: {log_e}")
+                                content_piece = getattr(chunk, 'content', None)
+                            except Exception:
+                                content_piece = None
+                            if content_piece:
+                                # 立即向前端流式下发作为最终回复
+                                if not response_started:
+                                    yield {"type": "ai_response_start", "content": "AI正在回复..."}
+                                    response_started = True
+                                buffered_chunks.append(content_piece)
+                                try:
+                                    print(f"📤 [判定LLM流] {content_piece}")
+                                except Exception:
+                                    pass
+                                yield {"type": "ai_response_chunk", "content": content_piece}
+                        elif ev == "on_chat_model_end":
+                            data = event.get("data", {})
+                            output = data.get("output")
+                            try:
+                                tool_calls_check = getattr(output, 'tool_calls', None)
+                            except Exception:
+                                tool_calls_check = None
+                            try:
+                                content_preview = getattr(output, 'content', None) or ""
+                            except Exception:
+                                content_preview = ""
+                except Exception as e:
+                    print(f"⚠️ 工具判定(流式)失败：{e}")
+                    tool_calls_check = None
+                    content_preview = ""
 
                 if tool_calls_check:
+                    if response_started:
+                        print("⚠️ 检测到 tool_calls 但已开始输出文本流，按无工具处理以避免冲突")
                     tool_calls_to_run = tool_calls_check
                     yield {"type": "tool_plan", "content": f"AI决定调用 {len(tool_calls_to_run)} 个工具", "tool_count": len(tool_calls_to_run)}
                     # 写回assistant带tool_calls
                     try:
                         shared_history.append({
                             "role": "assistant",
-                            "content": getattr(resp_check, 'content', None) or "",
+                            "content": "",
                             "tool_calls": tool_calls_to_run
                         })
                     except Exception:
-                        shared_history.append({"role": "assistant", "content": getattr(resp_check, 'content', None) or ""})
+                        shared_history.append({"role": "assistant", "content": ""})
 
                     # 执行工具（非流式）
                     exit_to_stream = False
@@ -424,113 +417,28 @@ class WebMCPAgent:
                         # 工具后继续下一轮
                         continue
 
-                # 3) 无工具：用“无工具实例”做纯流式（不会产生 tool_calls 增量 → 无 pydantic 报错）
-                #    同时保留短暂缓冲，保证首屏稳定
-                # 2) 流式探测阶段（短暂缓冲，避免工具阶段文本下发）
-                buffered_text = ""
-                response_started = False
-                final_text = ""
-
-                # 使用事件循环时间来做短暂缓冲阈值
-                loop = asyncio.get_event_loop()
-                start_t = loop.time()
-                buffer_window_seconds = 0.5  # 500ms 窗口
-                min_flush_chars = 60         # 或者文本达到一定长度就开始下发
-
-                try:
-                    stream_messages = [{"role": "system", "content": self._get_stream_system_prompt()}] + shared_history
-                    async for event in self.llm_stream.astream_events(stream_messages, version="v1"):
-                        ev = event.get("event")
-                        if ev != "on_chat_model_stream":
-                            continue
-                        data = event.get("data", {})
-                        chunk = data.get("chunk")
-                        if chunk is None:
-                            continue
-
-                        # 文本处理（缓冲 → 条件刷新 → 直接下发）
-                        try:
-                            content = getattr(chunk, 'content', None)
-                        except Exception:
-                            content = None
-                        if content:
-                            if not response_started:
-                                buffered_text += content
-                                time_elapsed = loop.time() - start_t
-                                if time_elapsed >= buffer_window_seconds or len(buffered_text) >= min_flush_chars:
-                                    yield {"type": "ai_response_start", "content": "AI正在回复..."}
-                                    yield {"type": "ai_response_chunk", "content": buffered_text}
-                                    final_text += buffered_text
-                                    buffered_text = ""
-                                    response_started = True
-                            else:
-                                final_text += content
-                                yield {"type": "ai_response_chunk", "content": content}
-                except Exception as e:
-                    print(f"❌ 大模型流式生成失败: {e}")
-                    yield {"type": "error", "content": f"大模型流式生成失败: {str(e)}"}
-                    return
-
-                # 未检测到工具：如果还没开始下发，说明全程都在缓冲内，统一作为最终回答下发
-                if not response_started:
-                    if buffered_text:
-                        yield {"type": "ai_response_start", "content": "AI正在回复..."}
-                        yield {"type": "ai_response_chunk", "content": buffered_text}
-                        final_text += buffered_text
-
-                yield {"type": "ai_response_end", "content": final_text}
-                return
-
-            # 轮次耗尽：不再报错，回退到最终回答的流式输出
-            print(f"⚠️ 达到最大推理轮数({max_rounds})，回退为直接生成最终回答（无工具）")
-            try:
-                buffered_text = ""
-                response_started = False
-                final_text = ""
-
-                loop = asyncio.get_event_loop()
-                start_t = loop.time()
-                buffer_window_seconds = 0.5
-                min_flush_chars = 60
-
-                stream_messages = [{"role": "system", "content": self._get_stream_system_prompt()}] + shared_history
-                async for event in self.llm_stream.astream_events(stream_messages, version="v1"):
-                    ev = event.get("event")
-                    if ev != "on_chat_model_stream":
-                        continue
-                    data = event.get("data", {})
-                    chunk = data.get("chunk")
-                    if chunk is None:
-                        continue
-
-                    try:
-                        content = getattr(chunk, 'content', None)
-                    except Exception:
-                        content = None
-                    if content:
-                        if not response_started:
-                            buffered_text += content
-                            time_elapsed = loop.time() - start_t
-                            if time_elapsed >= buffer_window_seconds or len(buffered_text) >= min_flush_chars:
-                                yield {"type": "ai_response_start", "content": "AI正在回复..."}
-                                yield {"type": "ai_response_chunk", "content": buffered_text}
-                                final_text += buffered_text
-                                buffered_text = ""
-                                response_started = True
-                        else:
-                            final_text += content
-                            yield {"type": "ai_response_chunk", "content": content}
-
-                if not response_started and buffered_text:
+                # 3) 无工具：若已开始流式，则只补一个结束；否则一次性输出
+                final_text = "".join(buffered_chunks) if buffered_chunks else (content_preview or "")
+                if response_started:
+                    yield {"type": "ai_response_end", "content": final_text}
+                else:
                     yield {"type": "ai_response_start", "content": "AI正在回复..."}
-                    yield {"type": "ai_response_chunk", "content": buffered_text}
-                    final_text += buffered_text
-
-                yield {"type": "ai_response_end", "content": final_text}
+                    if final_text:
+                        try:
+                            print(f"📤 [最终回复流] {final_text}")
+                        except Exception:
+                            pass
+                        yield {"type": "ai_response_chunk", "content": final_text}
+                    yield {"type": "ai_response_end", "content": final_text}
                 return
-            except Exception as e:
-                print(f"❌ 回退流式输出失败: {e}")
-                yield {"type": "error", "content": f"达到最大推理轮数，且回退生成失败: {str(e)}"}
+
+            # 轮次耗尽：直接返回提示信息
+            print(f"⚠️ 达到最大推理轮数({max_rounds})，直接返回提示信息")
+            final_text = "已达到最大推理轮数，请缩小问题范围或稍后重试。"
+            yield {"type": "ai_response_start", "content": "AI正在回复..."}
+            yield {"type": "ai_response_chunk", "content": final_text}
+            yield {"type": "ai_response_end", "content": final_text}
+            return
         except Exception as e:
             import traceback
             print(f"❌ chat_stream 异常: {e}")

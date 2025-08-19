@@ -1,25 +1,25 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCP Web 智能助手</title>
+    <title>MCP 智能助手</title>
     <link rel="stylesheet" href="css/style.css">
-    <!-- 引入marked.js用于markdown解析 -->
+    <!-- Include marked.js for markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-    <!-- 引入html2canvas用于截图 -->
+    <!-- Include html2canvas for screenshots -->
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
     <div class="app-container">
-        <!-- 顶部导航栏 -->
+        <!-- Top navigation bar -->
         <header class="header">
             <div class="header-content">
-                <h1 class="app-title">🤖 MCP Web 智能助手</h1>
+                <h1 class="app-title">🤖 MCP 智能助手</h1>
                 <div class="header-actions">
-                    <button id="clearChatBtn" class="btn btn-secondary">清空聊天</button>
+                    <button id="clearChatBtn" class="btn btn-secondary">清空对话</button>
                     <button id="shareChatBtn" class="btn btn-secondary">分享对话</button>
-                    <a href="tools.html" class="btn btn-secondary">工具列表</a>
+                    <a href="tools.html" class="btn btn-secondary">工具</a>
                     <div class="status-indicator">
                         <span id="connectionStatus" class="status-dot offline"></span>
                         <span id="connectionText">离线</span>
@@ -28,19 +28,19 @@
             </div>
         </header>
 
-        <!-- 主聊天区域 -->
+        <!-- Main chat area -->
         <main class="chat-container">
-            <!-- 聊天消息区域 -->
+            <!-- Chat messages area -->
             <div class="chat-messages" id="chatMessages">
                 <div class="welcome-message">
                     <div class="welcome-icon">🚀</div>
-                    <h2>欢迎使用 MCP Web 智能助手</h2>
-                    <p>我可以帮助您调用各种 MCP 工具来完成任务</p>
-                    <p>请在下方输入您的问题开始对话...</p>
+                    <h2>欢迎使用 MCP 智能助手</h2>
+                    <p>我可以帮助您调用各种 MCP 工具来完成任务，提供智能解答和数据处理服务。</p>
+                    <p>请在下方输入您的问题，开始对话。</p>
                 </div>
             </div>
 
-            <!-- 输入区域 -->
+            <!-- Input area -->
             <div class="chat-input-container">
                 <div class="chat-input-wrapper">
                     <textarea 
@@ -60,7 +60,7 @@
         </main>
     </div>
 
-    <!-- 加载遮罩 -->
+    <!-- Loading overlay -->
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
         <div class="loading-text">正在连接服务器...</div>
