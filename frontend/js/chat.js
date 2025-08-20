@@ -165,7 +165,7 @@ class ChatApp {
     }
     
     async connectWebSocket() {
-        this.showLoading('正在连接服务器...');
+        this.showLoading('Connecting to server...');
         this.updateConnectionStatus('connecting');
         await this.wsManager.connect();
         // 加载左侧线程列表（如果URL中有msid）
@@ -449,7 +449,7 @@ class ChatApp {
         });
         
         if (!success) {
-            this.showError('发送消息失败，请检查网络连接');
+            this.showError('发送失败，请检查网络连接');
             this.thinkingFlow.completeThinkingFlow('error');
         }
     }
@@ -765,7 +765,7 @@ class ChatApp {
         });
     }
     
-    showLoading(text = '加载中...') {
+    showLoading(text = 'Loading...') {
         this.loadingOverlay.style.display = 'flex';
         this.loadingOverlay.querySelector('div').textContent = text;
     }

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,7 +14,7 @@
             <div class="header-content">
                 <h1 class="app-title">🛠️ 工具</h1>
                 <div class="header-actions">
-                    <a href="index.html" class="btn btn-primary">返回聊天</a>
+                    <a href="index.html" class="btn btn-primary">返回对话</a>
                 </div>
             </div>
         </header>
@@ -62,7 +62,7 @@
                 if (result.success) {
                     displayTools(result.data);
                 } else {
-                    showError('加载工具列表失败');
+                    showError('工具列表加载失败');
                 }
             } catch (error) {
                 console.error('Failed to load tools:', error);
@@ -100,7 +100,7 @@
                             <button onclick="toggleAllServerGroups()" class="btn btn-secondary" style="padding: 0.5rem 1rem; border: none; border-radius: 0.5rem; background: #e2e8f0; color: #2d3748; cursor: pointer; font-size: 0.875rem; transition: all 0.2s ease;">
                                 <span id="toggle-all-text">全部折叠</span>
                             </button>
-                            <div class="stat-label">快速操作</div>
+                            <div class="stat-label">快捷操作</div>
                         </div>
                     </div>
                 </div>
@@ -154,12 +154,12 @@
                                         <div style="margin-bottom: 0.25rem;">
                                             <span class="param-name">${escapeHtml(name)}</span>
                                             <span class="${isRequired ? 'param-required' : 'param-optional'}">
-                                                ${isRequired ? '必需' : '可选'}
+                                                ${isRequired ? '必填' : '可选'}
                                             </span>
                                         </div>
                                         ${param.description ? `<div style="margin-bottom: 0.25rem;">${escapeHtml(param.description)}</div>` : ''}
-                                        ${param.type ? `<div class="param-type">类型: ${escapeHtml(param.type)}</div>` : ''}
-                                        ${param.enum ? `<div class="param-enum">可选值: [${param.enum.map(v => escapeHtml(String(v))).join(', ')}]</div>` : ''}
+                                        ${param.type ? `<div class="param-type">类型：${escapeHtml(param.type)}</div>` : ''}
+                                        ${param.enum ? `<div class="param-enum">取值：[${param.enum.map(v => escapeHtml(String(v))).join(', ')}]</div>` : ''}
                                     </div>
                                 `;
                             }).join('')}

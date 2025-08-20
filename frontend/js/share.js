@@ -15,12 +15,12 @@ class ShareApp {
             this.sessionId = this.getSessionIdFromUrl();
             
             if (!this.sessionId) {
-                this.showError('无效的分享链接', '缺少会话ID参数');
+                this.showError('Invalid share link', 'Missing session ID parameter');
                 return;
             }
             
             // 加载配置
-            this.showLoading('正在加载配置...');
+            this.showLoading('Loading configuration...');
             if (!window.configManager.isLoaded) {
                 await window.configManager.loadConfig();
             }
@@ -144,11 +144,11 @@ class ShareApp {
         headerDiv.innerHTML = `
             <div class="share-header-content">
                 <div class="share-icon">🔗</div>
-                <h2>分享的对话记录</h2>
-                <p>会话ID: <code>${this.escapeHtml(this.sessionId)}</code></p>
-                <p>共 ${totalMessages} 条对话记录</p>
+                <h2>Shared Conversation Record</h2>
+                <p>Session ID: <code>${this.escapeHtml(this.sessionId)}</code></p>
+                <p>Total ${totalMessages} conversation records</p>
                 <div class="share-timestamp">
-                    分享时间: ${new Date().toLocaleString('zh-CN')}
+                    Share time: ${new Date().toLocaleString('en-US')}
                 </div>
             </div>
         `;
@@ -331,6 +331,8 @@ class ShareApp {
         separatorDiv.innerHTML = `
             <strong>Conversation ${conversationNumber}</strong>
             <span style="margin-left: 1rem; font-size: 0.9rem;">${messageCount} messages</span>
+            <strong>Conversation ${conversationNumber}</strong>
+            <span style="margin-left: 1rem; font-size: 0.9rem;">${messageCount} messages</span>
         `;
         this.chatMessages.appendChild(separatorDiv);
     }
@@ -404,11 +406,14 @@ class ShareApp {
 
         // 2. 更新分析阶段
         this.thinkingFlow.updateThinkingStage('analyzing', 'AI analyzing', 'Analysis completed, preparing to execute tools.');
+        this.thinkingFlow.updateThinkingStage('analyzing', 'AI analyzing', 'Analysis completed, preparing to execute tools.');
 
         // 3. 计划工具
         const toolCount = record.mcp_tools_called.length;
         this.thinkingFlow.updateThinkingStage(
             'tools_planned',
+            `Planning to use ${toolCount} tool(s)`,
+            'Tools executed.',
             `Planning to use ${toolCount} tool(s)`,
             'Tools executed.',
             { toolCount: toolCount }
@@ -591,6 +596,7 @@ class ShareApp {
                 <h2>${this.escapeHtml(title)}</h2>
                 <p>${this.escapeHtml(message)}</p>
                 <p><a href="index.html">Back to Home</a></p>
+                <p><a href="index.html">Back to Home</a></p>
             </div>
         `;
     }
@@ -607,7 +613,7 @@ class ShareApp {
         `;
     }
     
-    showLoading(text = '加载中...') {
+    showLoading(text = 'Loading...') {
         this.loadingOverlay.style.display = 'flex';
         this.loadingOverlay.querySelector('div').textContent = text;
     }

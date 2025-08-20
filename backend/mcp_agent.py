@@ -7,6 +7,7 @@ import os
 import json
 import asyncio
 from typing import Dict, List, Any, AsyncGenerator, Optional
+from typing import Dict, List, Any, AsyncGenerator, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -15,6 +16,9 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
+import contextvars
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 import contextvars
@@ -66,7 +70,6 @@ class WebMCPAgent:
         self.tools_by_server = {}
         self.server_configs = {}
         self._used_tool_names = set()
-        # no special exit tool
 
         # 加载 .env 并设置API环境变量（覆盖已存在的环境变量）
         try:
@@ -304,6 +307,7 @@ class WebMCPAgent:
             self.server_configs = mcp_config.get("servers", {})
 
             # 允许没有外部MCP服务器
+            # 允许没有外部MCP服务器
             if not self.server_configs:
                 print("⚠️ 没有配置外部MCP服务器")
                 self.server_configs = {}
@@ -407,11 +411,17 @@ class WebMCPAgent:
             return False
 
     def _get_tools_system_prompt(self) -> str:
-        """用于工具判定/执行阶段的系统提示词：专注于是否需要调用工具与参数生成，不做正文分析输出。"""
+        """用于工具判定/执行阶段的系统提示词：通用助手风格"""
         now = datetime.now()
         current_date = now.strftime("%Y年%m月%d日")
         current_weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()]
         return (
+            f"今天是 {current_date}（{current_weekday}）。你是一个有用、无害、诚实的AI助手。\n"
+            "- 你可以使用可用的工具来帮助用户解决问题。\n"
+            "- 当用户的问题需要获取实时信息、执行特定操作或使用外部服务时，请使用合适的工具。\n"
+            "- 对于一般性问题、知识性问题或不需要工具的问题，请直接回答。\n"
+            "- 如果决定使用工具，请只输出 tool_calls，不要同时输出自然语言回答。\n"
+            "- 如果决定不使用工具，请提供有帮助的中文回答。\n"
             f"今天是 {current_date}（{current_weekday}）。你是一个工具调度器。" + "\n" +
             "- 默认不调用工具。只有在确实需要使用工具获取信息时才调用。" + "\n" +
             "- 优先直接回答：对纯推理/常识/总结类请求不要调用工具。" + "\n" +
@@ -422,6 +432,8 @@ class WebMCPAgent:
         )
 
     def _get_stream_system_prompt(self) -> str:
+        """保持接口以兼容旧调用，但当前不再使用流式回答提示词。"""
+        return ""
         """保持接口以兼容旧调用，但当前不再使用流式回答提示词。"""
         return ""
 
@@ -443,12 +455,18 @@ class WebMCPAgent:
         return sanitized
 
     async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """流式探测 + 立即中断：
         - 先直接 astream 开流，短暂缓冲并检测 function_call/tool_call；
         - 若检测到工具调用：立即中断本次流式（不下发缓冲），执行工具（非流式），写回 messages 后进入下一轮；
         - 若未检测到工具：将本次流作为最终回答，开始流式推送到结束。
         """
         try:
+            if session_id:
+                try:
+                    self._current_session_id_ctx.set(session_id)
+                except Exception:
+                    pass
             if session_id:
                 try:
                     self._current_session_id_ctx.set(session_id)
@@ -478,6 +496,7 @@ class WebMCPAgent:
             shared_history.append({"role": "user", "content": user_input})
 
             max_rounds = 25
+            max_rounds = 25
             round_index = 0
             # 合并两阶段输出为同一条消息：在整个会话回答期间仅发送一次 start，最后一次性 end
             combined_response_started = False
@@ -485,6 +504,7 @@ class WebMCPAgent:
                 round_index += 1
                 print(f"🧠 第 {round_index} 轮推理 (双实例：判定工具 + 纯流式回答)...")
 
+                # 2) 使用带工具实例做"流式判定"：
                 # 2) 使用带工具实例做"流式判定"：
                 tools_messages = [{"role": "system", "content": self._get_tools_system_prompt()}] + shared_history
                 tool_calls_check = None
@@ -528,7 +548,9 @@ class WebMCPAgent:
                                 content_preview = ""
                 except Exception as e:
                     print(f"⚠️ 工具判定(流式)失败：{e}")
+                    print(f"⚠️ 工具判定(流式)失败：{e}")
                     tool_calls_check = None
+                    content_preview = ""
                     content_preview = ""
 
                 if tool_calls_check:
@@ -544,9 +566,11 @@ class WebMCPAgent:
                         shared_history.append({
                             "role": "assistant",
                             "content": "",
+                            "content": "",
                             "tool_calls": tool_calls_to_run
                         })
                     except Exception:
+                        shared_history.append({"role": "assistant", "content": ""})
                         shared_history.append({"role": "assistant", "content": ""})
 
                     # 执行工具（非流式）
@@ -634,6 +658,13 @@ class WebMCPAgent:
                     yield {"type": "ai_response_end", "content": ""}
                 return
 
+            # 轮次耗尽：直接返回提示信息
+            print(f"⚠️ 达到最大推理轮数({max_rounds})，直接返回提示信息")
+            final_text = "已达到最大推理轮数，请缩小问题范围或稍后重试。"
+            yield {"type": "ai_response_start", "content": "AI正在回复..."}
+            yield {"type": "ai_response_chunk", "content": final_text}
+            yield {"type": "ai_response_end", "content": final_text}
+            return
             # 轮次耗尽：直接返回提示信息
             print(f"⚠️ 达到最大推理轮数({max_rounds})，直接返回提示信息")
             final_text = "已达到最大推理轮数，请缩小问题范围或稍后重试。"
