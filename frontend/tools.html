@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工具列表 - MCP Web 智能助手</title>
+    <title>工具 - MCP 智能助手</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/tools.css">
     <script src="js/config.js"></script>
@@ -12,7 +12,7 @@
     <div class="app-container">
         <header class="header">
             <div class="header-content">
-                <h1 class="app-title">🛠️ 工具列表</h1>
+                <h1 class="app-title">🛠️ 工具</h1>
                 <div class="header-actions">
                     <a href="index.html" class="btn btn-primary">返回聊天</a>
                 </div>
@@ -21,13 +21,13 @@
 
         <main class="tools-container">
             <a href="index.html" class="back-link">
-                ← 返回聊天界面
+← 返回聊天
             </a>
 
             <div id="toolsList">
                 <div class="loading-container">
                     <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
-                    正在加载工具列表...
+                    正在加载工具...
                 </div>
             </div>
         </main>
@@ -45,7 +45,7 @@
                 // 获取API地址 - 添加时间戳防止缓存
                 const timestamp = new Date().getTime();
                 const apiUrl = window.configManager.getFullApiUrl('/api/tools') + '?t=' + timestamp;
-                console.log('🔗 正在请求工具列表:', apiUrl);
+                console.log('🔗 Requesting tool list:', apiUrl);
                 
                 // 尽量避免触发预检请求，使用 cache 选项而不是自定义头
                 let response;
@@ -54,7 +54,7 @@
                 } catch (e1) {
                     // 兜底：同源相对路径（适配反向代理场景）
                     const fallbackUrl = `/api/tools?t=${timestamp}`;
-                    console.warn('⚠️ 主地址请求失败，尝试同源兜底:', fallbackUrl, e1);
+                    console.warn('⚠️ Main address request failed, trying same-origin fallback:', fallbackUrl, e1);
                     response = await fetch(fallbackUrl, { method: 'GET', cache: 'no-store' });
                 }
                 const result = await response.json();
@@ -65,8 +65,8 @@
                     showError('加载工具列表失败');
                 }
             } catch (error) {
-                console.error('加载工具失败:', error);
-                showError('无法连接到服务器，请检查配置文件中的后端地址');
+                console.error('Failed to load tools:', error);
+                showError('无法连接到服务器。请检查配置中的后端地址');
             }
         }
         
@@ -77,7 +77,7 @@
                 toolsList.innerHTML = `
                     <div class="error-container">
                         <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
-                        <h2>暂无可用工具</h2>
+                        <h2>没有可用的工具</h2>
                         <p>请检查 MCP 服务器配置</p>
                     </div>
                 `;
@@ -90,7 +90,7 @@
                     <div class="stats-grid">
                         <div class="stat-item">
                             <span class="stat-number">${data.total_tools || 0}</span>
-                            <div class="stat-label">总工具数</div>
+                            <div class="stat-label">工具总数</div>
                         </div>
                         <div class="stat-item">
                             <span class="stat-number">${data.server_count || 0}</span>
@@ -141,12 +141,12 @@
                         ${escapeHtml(tool.name)}
                     </div>
                     <div class="tool-description">
-                        ${escapeHtml(tool.description || '暂无描述')}
+                        ${escapeHtml(tool.description || 'No description')}
                     </div>
                     
                     ${hasParams ? `
                         <div class="tool-params">
-                            <strong style="color: #2d3748; margin-bottom: 0.5rem; display: block;">参数列表:</strong>
+                            <strong style="color: #2d3748; margin-bottom: 0.5rem; display: block;">Parameters:</strong>
                             ${Object.entries(tool.parameters).map(([name, param]) => {
                                 const isRequired = tool.required && tool.required.includes(name);
                                 return `
@@ -166,7 +166,7 @@
                         </div>
                     ` : `
                         <div style="color: #a0aec0; font-style: italic; padding: 1rem; background: white; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
-                            🎯 此工具无需参数
+                            🎯 无需参数
                         </div>
                     `}
                 </div>
@@ -305,7 +305,7 @@
                 caches.keys().then(names => {
                     names.forEach(name => {
                         if (name.includes('api') || name.includes('tools')) {
-                            console.log('🧹 清除API缓存:', name);
+                            console.log('🧹 Clearing API cache:', name);
                             caches.delete(name);
                         }
                     });
@@ -319,4 +319,4 @@
         });
     </script>
 </body>
-</html> 
+</html>

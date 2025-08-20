@@ -30,7 +30,7 @@ class ShareApp {
             
         } catch (error) {
             console.error('❌ 分享页面初始化失败:', error);
-            this.showError('加载失败', '无法加载分享的对话记录');
+            this.showError('加载失败', '无法加载分享的对话');
         }
     }
     
@@ -41,7 +41,7 @@ class ShareApp {
     
     async loadSharedChat() {
         try {
-            this.showLoading('正在加载对话记录...');
+            this.showLoading('正在加载对话...');
             
             const timestamp = Date.now();
             const apiUrl = window.configManager.getFullApiUrl(`/api/share/${encodeURIComponent(this.sessionId)}?t=${timestamp}`);
@@ -58,7 +58,7 @@ class ShareApp {
             
             if (!response.ok) {
                 if (response.status === 404) {
-                    this.showError('对话不存在', '未找到该会话的聊天记录，可能已被删除或会话ID无效');
+                    this.showError('对话未找到', '未找到此会话的聊天记录，可能已被删除或会话ID无效');
                 } else {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -76,7 +76,7 @@ class ShareApp {
             this.displayChatHistory(result.data);
             
             // 更新页面标题
-            document.title = `分享的对话 (${result.total_records}条消息) - MCP Web 智能助手`;
+            document.title = `分享的对话 (${result.total_records} 条消息) - MCP 智能助手`;
             
             this.hideLoading();
             
@@ -329,8 +329,8 @@ class ShareApp {
         const separatorDiv = document.createElement('div');
         separatorDiv.className = 'conversation-separator';
         separatorDiv.innerHTML = `
-            <strong>对话 ${conversationNumber}</strong>
-            <span style="margin-left: 1rem; font-size: 0.9rem;">${messageCount} 条消息</span>
+            <strong>Conversation ${conversationNumber}</strong>
+            <span style="margin-left: 1rem; font-size: 0.9rem;">${messageCount} messages</span>
         `;
         this.chatMessages.appendChild(separatorDiv);
     }
@@ -403,14 +403,14 @@ class ShareApp {
         this.thinkingFlow.createThinkingFlow();
 
         // 2. 更新分析阶段
-        this.thinkingFlow.updateThinkingStage('analyzing', 'AI 正在分析', '已完成分析，准备执行工具。');
+        this.thinkingFlow.updateThinkingStage('analyzing', 'AI analyzing', 'Analysis completed, preparing to execute tools.');
 
         // 3. 计划工具
         const toolCount = record.mcp_tools_called.length;
         this.thinkingFlow.updateThinkingStage(
             'tools_planned',
-            `决定使用 ${toolCount} 个工具`,
-            '工具已执行。',
+            `Planning to use ${toolCount} tool(s)`,
+            'Tools executed.',
             { toolCount: toolCount }
         );
 
@@ -590,7 +590,7 @@ class ShareApp {
                 <div class="error-icon">❌</div>
                 <h2>${this.escapeHtml(title)}</h2>
                 <p>${this.escapeHtml(message)}</p>
-                <p><a href="index.html">返回首页</a></p>
+                <p><a href="index.html">Back to Home</a></p>
             </div>
         `;
     }
@@ -600,8 +600,8 @@ class ShareApp {
         this.chatMessages.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">💬</div>
-                <h2>暂无对话记录</h2>
-                <p>该会话还没有任何对话记录</p>
+                <h2>No Conversation Records</h2>
+                <p>This session has no conversation records yet</p>
                 <p><a href="index.html">开始新对话</a></p>
             </div>
         `;

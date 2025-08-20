@@ -22,6 +22,44 @@ body {
     overflow: hidden;
 }
 
+/* 左侧历史对话侧栏 */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    padding-top: 68px; /* header 高度占位 */
+    transform: translateX(-100%); /* 默认隐藏，不挤占主内容布局 */
+    transition: transform 0.2s ease;
+    z-index: 950;
+}
+.sidebar.open { transform: translateX(0); }
+.sidebar-header {
+    position: fixed;
+    top: 0; left: 0; right: auto;
+    height: 68px;
+    width: 260px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    z-index: 951;
+}
+.sidebar-content {
+    overflow-y: auto; height: 100%; padding: 12px;
+}
+.thread-item {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 8px; cursor: pointer;
+}
+.thread-item:hover { background: #f7fafc; }
+.thread-item .title { font-weight: 600; font-size: 0.9rem; color: #2d3748; }
+.thread-item .meta { font-size: 0.75rem; color: #718096; margin-top: 4px; display:flex; justify-content: space-between; align-items:center; }
+.thread-item .delete-icon { color:#e53e3e; margin-left:8px; cursor:pointer; padding:2px 6px; border-radius:6px; }
+.thread-item .delete-icon:hover { background:#fed7d7; }
+
 /* 顶部导航栏 */
 .header {
     background: white;
@@ -41,6 +79,9 @@ body {
     margin: 0 auto;
 }
 
+/* 让主内容在侧栏展开时右移 */
+/* 侧栏为悬浮覆盖层，不改变主内容布局，不再右移主内容 */
+
 .app-title {
     font-size: 1.5rem;
     font-weight: 600;
@@ -52,6 +93,25 @@ body {
     align-items: center;
     gap: 1rem;
 }
+
+/* 模型切换下拉样式 */
+.model-switcher { position: relative; }
+.dropdown-menu {
+    position: absolute;
+    top: 36px;
+    left: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    min-width: 220px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 1000;
+}
+.dropdown-menu .dropdown-item {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.dropdown-menu .dropdown-item:hover { background: #f7fafc; }
 
 /* 按钮样式 */
 .btn {
@@ -620,6 +680,9 @@ body {
     border-radius: 1rem;
     padding: 0.75rem 1rem;
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     border: 1px solid #e2e8f0;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     /* 确保输入框容器不会被压缩 */
@@ -645,7 +708,7 @@ body {
     max-height: 120px;
     padding: 0;
     width: 100%;
-    padding-right: 56px; /* space for button */
+    padding-right: 0; /* 按钮并排显示时不需要预留空间 */
     font-family: inherit;
     color: #2d3748;
     /* 确保长文本可以正确换行 */
@@ -675,9 +738,8 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
-    position: absolute;
-    right: 1rem;
-    bottom: 0.75rem;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -808,14 +870,15 @@ body {
     }
     
     .chat-input-wrapper {
-        flex-direction: column;
-        gap: 0.75rem;
+        flex-direction: row; /* 保持与输入框同一行 */
+        gap: 0.5rem;
     }
-    
+
     .send-btn {
-        align-self: flex-end;
-        width: auto;
-        padding: 0.75rem 1.5rem;
+        align-self: center;
+        width: 44px;
+        height: 44px;
+        padding: 0;
         border-radius: 0.75rem;
     }
     
@@ -1035,6 +1098,10 @@ body {
     overflow: hidden;
     transition: all 0.3s ease;
     flex-shrink: 0; /* 防止被Flexbox压缩 */
+    /* 限制宽度与AI消息一致 */
+    max-width: 75%;
+    width: 100%;
+    align-self: flex-start; /* 左对齐，风格与AI回复一致 */
 }
 
 .thinking-flow-header {
@@ -1047,6 +1114,10 @@ body {
     cursor: pointer;
     transition: background-color 0.2s ease;
 }
+
+/* 精简模式小进度条 */
+.thinking-mini-progress { flex: 1; height: 4px; background: #e2e8f0; margin: 0 8px; border-radius: 4px; overflow: hidden; }
+.thinking-mini-progress .bar { display: block; height: 100%; width: 0; background: #4299e1; transition: width 0.3s ease; }
 
 .thinking-flow-header:hover {
     background: rgba(66, 153, 225, 0.08);
@@ -1470,6 +1541,8 @@ body {
     .thinking-flow-header {
         padding: 0.75rem 1rem;
     }
+    /* 移动端与消息宽度一致 */
+    .thinking-flow { max-width: 90%; }
     
     .thinking-flow-content {
         padding: 1rem;

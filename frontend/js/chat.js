@@ -9,13 +9,21 @@ class ChatApp {
         
         // DOM 元素
         this.chatMessages = document.getElementById('chatMessages');
+        // 缓存欢迎卡片模板，供“Start New Chat”复用
+        this.welcomeHTML = (this.chatMessages.querySelector('.welcome-message')?.outerHTML) || '';
         this.messageInput = document.getElementById('messageInput');
         this.sendBtn = document.getElementById('sendBtn');
         this.clearChatBtn = document.getElementById('clearChatBtn');
+        this.startNewChatBtn = document.getElementById('startNewChatBtn');
         this.connectionStatus = document.getElementById('connectionStatus');
         this.connectionText = document.getElementById('connectionText');
         this.charCount = document.getElementById('charCount');
         this.loadingOverlay = document.getElementById('loadingOverlay');
+        this.modelDropdownBtn = document.getElementById('modelDropdownBtn');
+        this.modelDropdown = document.getElementById('modelDropdown');
+        this.threadsList = document.getElementById('threadsList');
+        this.toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+        this.openSidebarBtn = document.getElementById('openSidebarBtn');
         
         this.init();
     }
@@ -23,7 +31,7 @@ class ChatApp {
     async init() {
         try {
             // 首先确保配置已加载
-            this.showLoading('正在加载配置文件...');
+            this.showLoading('正在加载配置...');
             
             if (!window.configManager.isLoaded) {
                 await window.configManager.loadConfig();
@@ -31,6 +39,8 @@ class ChatApp {
             
             // 配置加载成功后再初始化其他组件
             this.setupEventListeners();
+            // 先加载Model并设置本地选择（确保首连就携带 model）
+            await this.loadModelsAndRenderDropdown();
             this.setupWebSocket();
             await this.connectWebSocket();
         } catch (error) {
@@ -66,10 +76,21 @@ class ChatApp {
             }
         });
         
-        // 清空聊天
-        this.clearChatBtn.addEventListener('click', () => {
-            this.clearChat();
-        });
+        // 兼容旧按钮（如存在）
+        if (this.clearChatBtn) {
+            this.clearChatBtn.addEventListener('click', () => this.clearChat());
+        }
+        // 新建对话：仅清屏，不删除历史
+        if (this.startNewChatBtn) {
+            this.startNewChatBtn.addEventListener('click', () => {
+                // 直接恢复预缓存的欢迎卡片模板
+                this.chatMessages.innerHTML = this.welcomeHTML || this.chatMessages.innerHTML;
+                this.thinkingFlow.clear();
+                this.currentAIMessage = null;
+                this.updateSendButton();
+                this.scrollToBottom();
+            });
+        }
         
         // 初始化分享模块
         this.shareModule = new ShareModule(this);
@@ -78,6 +99,43 @@ class ChatApp {
         window.addEventListener('beforeunload', () => {
             this.wsManager.close();
         });
+
+        // 侧栏开关
+        if (this.toggleSidebarBtn) {
+            this.toggleSidebarBtn.addEventListener('click', () => {
+                const sidebar = document.getElementById('historySidebar');
+                if (!sidebar) return;
+                const isOpen = sidebar.classList.toggle('open');
+                this.toggleSidebarBtn.textContent = isOpen ? 'Hide' : 'Show';
+            });
+        }
+        if (this.openSidebarBtn) {
+            this.openSidebarBtn.addEventListener('click', async () => {
+                const sidebar = document.getElementById('historySidebar');
+                if (!sidebar) return;
+                const isOpen = sidebar.classList.toggle('open');
+                // 打开时刷新；关闭时不动
+                if (isOpen) {
+                    await this.loadThreadsByMsidFromUrl();
+                }
+                // 可选：按钮文案提示
+                this.openSidebarBtn.textContent = isOpen ? '历史记录 (已展开)' : '历史记录';
+            });
+        }
+
+        // Model下拉
+        if (this.modelDropdownBtn) {
+            this.modelDropdownBtn.addEventListener('click', () => {
+                if (!this.modelDropdown) return;
+                this.modelDropdown.style.display = this.modelDropdown.style.display === 'none' || this.modelDropdown.style.display === '' ? 'block' : 'none';
+            });
+            // 点击页面其他地方关闭
+            document.addEventListener('click', (e) => {
+                if (!this.modelDropdownBtn.contains(e.target) && !this.modelDropdown.contains(e.target)) {
+                    this.modelDropdown.style.display = 'none';
+                }
+            });
+        }
     }
     
     setupWebSocket() {
@@ -102,7 +160,7 @@ class ChatApp {
         
         this.wsManager.onReconnecting = (attempt, maxAttempts) => {
             this.updateConnectionStatus('connecting');
-            this.showStatus(`正在重连... (${attempt}/${maxAttempts})`);
+            this.showStatus(`Reconnecting... (${attempt}/${maxAttempts})`);
         };
     }
     
@@ -110,6 +168,165 @@ class ChatApp {
         this.showLoading('正在连接服务器...');
         this.updateConnectionStatus('connecting');
         await this.wsManager.connect();
+        // 加载左侧线程列表（如果URL中有msid）
+        this.loadThreadsByMsidFromUrl();
+    }
+
+    async loadThreadsByMsidFromUrl() {
+        try {
+            const urlParams = new URLSearchParams(window.location.search || '');
+            const msid = urlParams.get('msid');
+            if (!msid) return;
+            const apiUrl = window.configManager.getFullApiUrl(`/api/threads?msid=${encodeURIComponent(msid)}`);
+            const res = await fetch(apiUrl, { cache: 'no-store' });
+            const json = await res.json();
+            if (!json.success) return;
+            this.renderThreads(json.data || []);
+        } catch (e) { console.warn('加载线程列表失败', e); }
+    }
+
+    renderThreads(threads) {
+        if (!this.threadsList) return;
+        this.threadsList.innerHTML = '';
+        threads.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'thread-item';
+            const title = (t.first_user_input || 'New conversation').slice(0, 40);
+            const meta = `${t.message_count || 0} msgs · ${new Date(t.last_time).toLocaleString()}`;
+            div.innerHTML = `<div class="title">${this.escapeHtml(title)}</div><div class="meta"><span>${this.escapeHtml(meta)}</span><span class="delete-icon" title="Delete">🗑️</span></div>`;
+            div.addEventListener('click', () => {
+                // 切换会话：将 conversation_id 透传到历史 API 拉取详情
+                this.loadHistoryForConversation(t.session_id, t.conversation_id);
+            });
+            // 删除图标点击（阻止冒泡）
+            const del = div.querySelector('.delete-icon');
+            del.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm('Delete this conversation?')) return;
+                try {
+                    const apiUrl = window.configManager.getFullApiUrl(`/api/threads?session_id=${encodeURIComponent(t.session_id)}&conversation_id=${encodeURIComponent(t.conversation_id)}`);
+                    const res = await fetch(apiUrl, { method: 'DELETE' });
+                    const json = await res.json();
+                    if (json && json.success) {
+                        div.remove();
+                    }
+                } catch (err) { console.warn('删除会话失败', err); }
+            });
+            this.threadsList.appendChild(div);
+        });
+    }
+
+    async loadHistoryForConversation(sessionId, conversationId) {
+        try {
+            // 清空界面并加载该会话的历史
+            this.clearChat();
+            this.sessionId = sessionId;
+            // 历史回放前隐藏欢迎卡片，避免布局被居中规则影响
+            this.hideWelcomeMessage();
+            const apiUrl = window.configManager.getFullApiUrl(`/api/history?session_id=${encodeURIComponent(sessionId)}&conversation_id=${encodeURIComponent(conversationId)}`);
+            const res = await fetch(apiUrl, { cache: 'no-store' });
+            const json = await res.json();
+            if (!json.success) return;
+            // 把历史记录渲染为与实时一致的结构：用户消息 → 思维链(只读) → AI回复
+            (json.data || []).forEach(r => {
+                if (r.user_input) this.addUserMessage(r.user_input);
+
+                // 思维链（只读复现）
+                this.thinkingFlow.createThinkingFlow();
+                const toolsCalled = Array.isArray(r.mcp_tools_called) ? r.mcp_tools_called : [];
+                const results = Array.isArray(r.mcp_results) ? r.mcp_results : [];
+                if (toolsCalled.length > 0) {
+                    this.thinkingFlow.updateThinkingStage(
+                        'tools_planned',
+                        `Planning to use ${toolsCalled.length} tool(s)`,
+                        'Replaying recorded tool operations...',
+                        { toolCount: toolsCalled.length }
+                    );
+                    // 将结果按 tool_id 映射，便于匹配
+                    const idToResult = {};
+                    results.forEach(x => { if (x && x.tool_id) idToResult[x.tool_id] = x; });
+                    toolsCalled.forEach(tc => {
+                        const toolId = tc.tool_id || tc.id || tc.name || Math.random().toString(36).slice(2);
+                        const toolName = tc.tool_name || (tc.function && tc.function.name) || tc.name || 'tool';
+                        const args = tc.tool_args || (tc.function && tc.function.arguments) || {};
+                        // 执行占位
+                        this.thinkingFlow.addToolToThinking({ tool_id: toolId, tool_name: toolName, tool_args: args });
+                        // 完成并展示结果
+                        const matched = idToResult[toolId] || {};
+                        if (matched && matched.result !== undefined) {
+                            this.thinkingFlow.updateToolInThinking({ tool_id: toolId, tool_name: toolName, result: String(matched.result) }, 'completed');
+                        } else if (matched && matched.error) {
+                            this.thinkingFlow.updateToolInThinking({ tool_id: toolId, tool_name: toolName, error: String(matched.error) }, 'error');
+                        } else {
+                            this.thinkingFlow.updateToolInThinking({ tool_id: toolId, tool_name: toolName, result: '(no recorded result)' }, 'completed');
+                        }
+                    });
+                    this.thinkingFlow.updateThinkingStage('responding', 'Preparing response', 'Organizing evidence-based conclusions and recommendations...');
+                    this.thinkingFlow.completeThinkingFlow('success');
+                } else {
+                    // 没有工具，直接标记完成
+                    this.thinkingFlow.updateThinkingStage('responding', 'Preparing response', 'Organizing evidence-based conclusions and recommendations...');
+                    this.thinkingFlow.completeThinkingFlow('success');
+                }
+
+                if (r.ai_response) {
+                    this.startAIResponse();
+                    this.appendAIResponse(r.ai_response);
+                    this.endAIResponse();
+                }
+            });
+            this.scrollToBottom();
+        } catch (e) { console.warn('加载会话历史失败', e); }
+    }
+
+    async loadModelsAndRenderDropdown() {
+        try {
+            const apiUrl = window.configManager.getFullApiUrl('/api/models');
+            const res = await fetch(apiUrl, { cache: 'no-store' });
+            const json = await res.json();
+            if (!json.success) throw new Error('加载Model列表失败');
+            const { models, default: def } = json.data || { models: [], default: 'default' };
+
+            let selected = localStorage.getItem('mcp_selected_model') || def;
+            // 如果本地无记录，写入一次，保证首连就有 model
+            if (!localStorage.getItem('mcp_selected_model')) {
+                localStorage.setItem('mcp_selected_model', selected);
+            }
+            this.updateModelButtonLabel(models, selected);
+
+            // 渲染菜单
+            if (this.modelDropdown) {
+                this.modelDropdown.innerHTML = '';
+                models.forEach(m => {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    item.textContent = `${m.label || m.id} (${m.model || ''})`;
+                    item.addEventListener('click', async () => {
+                        localStorage.setItem('mcp_selected_model', m.id);
+                        this.updateModelButtonLabel(models, m.id);
+                        this.modelDropdown.style.display = 'none';
+                        // 断开并重连以携带新Model参数
+                        try { this.wsManager.close(); } catch {}
+                        // 强制下次连接重新初始化，以便重建URL并附带 model
+                        this.wsManager.isInitialized = false;
+                        await this.connectWebSocket();
+                    });
+                    this.modelDropdown.appendChild(item);
+                });
+            }
+        } catch (e) {
+            console.warn('⚠️ 无法加载Model列表:', e);
+        }
+    }
+
+    updateModelButtonLabel(models, selectedId) {
+        try {
+            const picked = (models || []).find(m => m.id === selectedId);
+            const label = picked ? (picked.label || picked.id) : selectedId;
+            if (this.modelDropdownBtn) {
+                this.modelDropdownBtn.textContent = `Model：${label} ▾`;
+            }
+        } catch {}
     }
     
     handleWebSocketMessage(data) {
@@ -148,8 +365,8 @@ class ChatApp {
             case 'tool_plan':
                 this.thinkingFlow.updateThinkingStage(
                     'tools_planned', 
-                    `决定使用 ${data.tool_count} 个工具`, 
-                    '准备执行工具调用...',
+                    `Planning to use ${data.tool_count} tool(s)`, 
+                    'Preparing clinical data operations...',
                     { toolCount: data.tool_count }
                 );
                 break;
@@ -167,7 +384,7 @@ class ChatApp {
                 break;
                 
             case 'ai_response_start':
-                this.thinkingFlow.updateThinkingStage('responding', '准备回答', '正在整理回复内容...');
+                this.thinkingFlow.updateThinkingStage('responding', 'Preparing response', 'Organizing evidence-based conclusions and recommendations...');
                 
                 // 确保思维流可见 - 滚动到思维流位置
                 const currentFlow = this.thinkingFlow.getCurrentFlow();
@@ -250,7 +467,7 @@ class ChatApp {
                 renderedContent = this.escapeHtml(content);
             }
         } catch (error) {
-            console.warn('用户消息Markdown渲染错误:', error);
+            console.warn('User message Markdown rendering error:', error);
             renderedContent = this.escapeHtml(content);
         }
         

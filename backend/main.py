@@ -118,6 +118,12 @@ class ConnectionManager:
             session_id = self.connection_sessions[websocket]
             del self.connection_sessions[websocket]
             print(f"📱 连接断开，会话ID: {session_id}，当前连接数: {len(self.active_connections)}")
+            # 清理会话上下文，避免日志中积累大量历史会话
+            try:
+                if mcp_agent and hasattr(mcp_agent, 'session_contexts'):
+                    mcp_agent.session_contexts.pop(session_id, None)
+            except Exception:
+                pass
     
     def get_session_id(self, websocket: WebSocket) -> str:
         """获取WebSocket连接对应的会话ID"""
@@ -135,6 +141,49 @@ manager = ConnectionManager()
 async def websocket_chat(websocket: WebSocket):
     """WebSocket聊天接口"""
     session_id = await manager.connect(websocket)
+    # 从连接查询参数中读取 msid 与 model 并保存到会话上下文（后端隐藏使用，不回传给前端）
+    try:
+        print(f"🔍 WebSocket 查询参数: {dict(websocket.query_params)}")
+        msid_param = websocket.query_params.get("msid")
+        model_param = websocket.query_params.get("model")
+        print(f"🔍 提取的 msid 参数: {msid_param}")
+        print(f"🔍 提取的 model 参数: {model_param}")
+        if msid_param is not None and msid_param != "":
+            try:
+                msid_value = int(msid_param)
+                if not hasattr(mcp_agent, 'session_contexts'):
+                    mcp_agent.session_contexts = {}
+                mcp_agent.session_contexts[session_id] = {"msid": msid_value}
+                print(f"🔐 已为会话 {session_id} 记录 msid={msid_value}")
+                print(f"🔍 当前所有会话上下文: {mcp_agent.session_contexts}")
+            except Exception as e:
+                print(f"⚠️ 解析 msid 失败: {e}")
+                # 非法 msid 忽略
+                if not hasattr(mcp_agent, 'session_contexts'):
+                    mcp_agent.session_contexts = {}
+                mcp_agent.session_contexts[session_id] = {}
+        else:
+            print(f"⚠️ msid 参数为空或不存在")
+            if not hasattr(mcp_agent, 'session_contexts'):
+                mcp_agent.session_contexts = {}
+            mcp_agent.session_contexts[session_id] = {}
+
+        # 记录模型档位（如果提供）
+        try:
+            if model_param is not None and model_param != "":
+                if not hasattr(mcp_agent, 'session_contexts'):
+                    mcp_agent.session_contexts = {}
+                session_ctx = mcp_agent.session_contexts.get(session_id, {})
+                session_ctx["model"] = str(model_param)
+                mcp_agent.session_contexts[session_id] = session_ctx
+                print(f"🔐 已为会话 {session_id} 记录 model={model_param}")
+        except Exception as e:
+            print(f"⚠️ 记录 model 失败: {e}")
+    except Exception as _e:
+        print(f"❌ 处理 msid 参数异常: {_e}")
+        if not hasattr(mcp_agent, 'session_contexts'):
+            mcp_agent.session_contexts = {}
+        mcp_agent.session_contexts[session_id] = {}
     
     try:
         while True:
@@ -176,7 +225,7 @@ async def websocket_chat(websocket: WebSocket):
 
                     # 流式处理并推送AI响应
                     try:
-                        async for response_chunk in mcp_agent.chat_stream(user_input, history=history):
+                        async for response_chunk in mcp_agent.chat_stream(user_input, history=history, session_id=current_session_id):
                             # 转发给客户端
                             await manager.send_personal_message(response_chunk, websocket)
                             
@@ -258,7 +307,8 @@ async def websocket_chat(websocket: WebSocket):
                                 mcp_tools_called=conversation_data["mcp_tools_called"],
                                 mcp_results=conversation_data["mcp_results"],
                                 ai_response=ai_response,
-                                session_id=current_session_id
+                                session_id=current_session_id,
+                                msid=mcp_agent.session_contexts.get(current_session_id, {}).get("msid") if hasattr(mcp_agent, 'session_contexts') else None
                             )
                             if success:
                                 print(f"✅ 对话记录保存成功")
@@ -322,6 +372,16 @@ async def get_tools():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取工具列表失败: {str(e)}")
 
+@app.get("/api/models")
+async def get_models():
+    """获取可选的大模型档位列表（用于前端下拉选择）。"""
+    if not mcp_agent:
+        raise HTTPException(status_code=503, detail="MCP智能体未初始化")
+    try:
+        return {"success": True, "data": mcp_agent.get_models_info()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
+
 @app.get("/api/history")
 async def get_history(limit: int = 50, session_id: str = "default", conversation_id: int = None):
     """获取聊天历史"""
@@ -349,6 +409,17 @@ async def get_history(limit: int = 50, session_id: str = "default", conversation
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取历史记录失败: {str(e)}")
 
+@app.get("/api/threads")
+async def get_threads(msid: int, limit: int = 100):
+    """按 msid 获取对话线程列表（左侧侧栏用）。"""
+    if not chat_db:
+        raise HTTPException(status_code=503, detail="数据库未初始化")
+    try:
+        threads = await chat_db.get_threads_by_msid(msid=msid, limit=limit)
+        return {"success": True, "data": threads}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取线程列表失败: {str(e)}")
+
 @app.delete("/api/history")
 async def clear_history(session_id: str = None):
     """清空聊天历史"""
@@ -370,6 +441,19 @@ async def clear_history(session_id: str = None):
             raise HTTPException(status_code=500, detail="清空历史记录失败")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"清空历史记录失败: {str(e)}")
+
+@app.delete("/api/threads")
+async def delete_thread(session_id: str, conversation_id: int):
+    """删除某个对话线程"""
+    if not chat_db:
+        raise HTTPException(status_code=503, detail="数据库未初始化")
+    try:
+        ok = await chat_db.delete_conversation(session_id=session_id, conversation_id=conversation_id)
+        if ok:
+            return {"success": True}
+        raise HTTPException(status_code=500, detail="删除对话线程失败")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除对话线程失败: {str(e)}")
 
 @app.get("/api/status")
 async def get_status():

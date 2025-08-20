@@ -5,33 +5,36 @@ class ThinkingFlow {
         this.appName = appName;
         this.currentThinkingFlow = null;
         this.activeTools = new Map();
+        this.toolStats = { planned: 0, started: 0, completed: 0, error: 0 };
     }
 
-    // 创建思维流容器
+    // 创建思维流容器（精简模式：紧凑横条 + 可展开详情）
     createThinkingFlow() {
         const flowDiv = document.createElement('div');
-        flowDiv.className = 'thinking-flow';
+        flowDiv.className = 'thinking-flow condensed collapsed';
         flowDiv.id = `thinking-flow-${Date.now()}`;
-        
+
         flowDiv.innerHTML = `
             <div class="thinking-flow-header">
                 <div class="thinking-flow-title">
-                    <span class="thinking-icon">🤖</span>
-                    <span class="thinking-text">AI 正在思考...</span>
+                    <span class="thinking-icon">⚙️</span>
+                    <span class="thinking-text">处理中...</span>
                 </div>
+                <div class="thinking-mini-progress"><span class="bar"></span></div>
                 <button class="thinking-flow-toggle" onclick="${this.appName}.thinkingFlow.toggleThinkingFlow('${flowDiv.id}')">
-                    <span class="toggle-icon">▼</span>
+                    <span class="toggle-icon">▶</span>
                 </button>
             </div>
             <div class="thinking-flow-content">
-                <div class="thinking-stages">
-                    <!-- 移除硬编码的初始阶段，让动态内容自然填充 -->
-                </div>
+                <div class="thinking-stages"></div>
             </div>
         `;
-        
+
         this.appInstance.chatMessages.appendChild(flowDiv);
         this.currentThinkingFlow = flowDiv;
+        // 初始化统计
+        this.toolStats = { planned: 0, started: 0, completed: 0, error: 0 };
+        this.updateHeaderSummary();
         this.appInstance.scrollToBottom();
     }
 
@@ -58,7 +61,7 @@ class ThinkingFlow {
         thinkingStage.className = 'thinking-stage active';
         thinkingStage.setAttribute('data-stage', thinkingStageId);
         
-        const stageTitle = iteration ? `第${iteration}轮推理` : 'AI 分析思考';
+        const stageTitle = iteration ? `Reasoning #${iteration}` : 'Analyzing';
         
         thinkingStage.innerHTML = `
             <div class="stage-icon">
@@ -66,7 +69,7 @@ class ThinkingFlow {
             </div>
             <div class="stage-content">
                 <div class="stage-title">${stageTitle}</div>
-                <div class="stage-detail">正在分析和制定解决方案...</div>
+                <div class="stage-detail">Working...</div>
                 <div class="thinking-content">
                     <div class="ai-thinking-text">
                         <span class="thinking-cursor">▋</span>
@@ -160,7 +163,7 @@ class ThinkingFlow {
             }
         }
 
-        // 更新标题
+        // 更新标题（精简：仅显示关键阶段和统计）
         thinkingText.textContent = title;
 
         // 创建新阶段
@@ -171,6 +174,8 @@ class ThinkingFlow {
         let iconContent = '<div class="thinking-spinner"></div>';
         if (stage === 'tools_planned') {
             iconContent = `<span class="stage-number">${data.toolCount || 1}</span>`;
+            this.toolStats.planned = data.toolCount || 1;
+            this.updateHeaderSummary();
         }
         
         stageDiv.innerHTML = `
@@ -206,11 +211,11 @@ class ThinkingFlow {
         const flowHeader = this.currentThinkingFlow.querySelector('.thinking-flow-header');
         
         if (status === 'success') {
-            thinkingText.textContent = '思考完成';
+            thinkingText.textContent = '推理完成';
             flowHeader.classList.add('completed');
         } else {
             thinkingText.textContent = '处理出错';
-            flowHeader.classList.add('error');
+                flowHeader.classList.add('error');
         }
 
         // 清理引用
@@ -236,13 +241,16 @@ class ThinkingFlow {
                 </div>
                 <div class="tool-info">
                     <div class="tool-name">${this.appInstance.escapeHtml(data.tool_name)}</div>
-                    <div class="tool-progress">准备执行</div>
+                    <div class="tool-progress">Preparing execution</div>
                 </div>
             </div>
         `;
         
         toolsContainer.appendChild(toolDiv);
         this.activeTools.set(data.tool_id, toolDiv);
+        // 统计与进度
+        this.toolStats.started += 1;
+        this.updateHeaderSummary();
         this.appInstance.scrollToBottom();
     }
 
@@ -259,7 +267,8 @@ class ThinkingFlow {
 
         if (status === 'completed') {
             statusIcon = '<span class="tool-check">✓</span>';
-            statusText = '执行完成';
+            statusText = '完成';
+            this.toolStats.completed += 1;
             
             // 添加结果显示
             const resultContent = this.formatToolResult(data.result);
@@ -273,7 +282,7 @@ class ThinkingFlow {
                     ${isLongContent ? `
                         <button class="tool-result-toggle" onclick="${this.appName}.thinkingFlow.toggleToolResult('${data.tool_id}')">
                             <span class="toggle-icon">▶</span>
-                            <span>展开</span>
+                            <span>Expand</span>
                         </button>
                     ` : ''}
                 </div>
@@ -284,8 +293,9 @@ class ThinkingFlow {
 
         } else if (status === 'error') {
             statusIcon = '<span class="tool-error">✗</span>';
-            statusText = '执行失败';
-            resultSection = `<div class="tool-result-content error-text">${this.appInstance.escapeHtml(data.error)}</div>`;
+            statusText = '失败';
+                resultSection = `<div class="tool-result-content error-text">${this.appInstance.escapeHtml(data.error)}</div>`;
+                this.toolStats.error += 1;
         }
         
         toolDiv.innerHTML = `
@@ -299,6 +309,7 @@ class ThinkingFlow {
             ${resultSection}
         `;
 
+        this.updateHeaderSummary();
         // 检查是否所有工具都完成了
         this.checkAllToolsCompleted();
     }
@@ -315,8 +326,30 @@ class ThinkingFlow {
         const completedTools = toolsContainer.querySelectorAll('.thinking-tool.completed, .thinking-tool.error');
         
         if (allTools.length > 0 && allTools.length === completedTools.length) {
-            this.updateThinkingStage('tools_completed', '工具执行完成', '正在处理结果，准备回答...');
+            this.updateThinkingStage('tools_completed', '工具执行完成', '正在综合分析结果并准备回复...');
+            // 完成后自动折叠为紧凑
+            const flowId = this.currentThinkingFlow.id;
+            setTimeout(() => this.toggleThinkingFlow(flowId, true), 800);
         }
+    }
+
+    // 更新头部简要统计 & 小进度条
+    updateHeaderSummary() {
+        if (!this.currentThinkingFlow) return;
+        const header = this.currentThinkingFlow.querySelector('.thinking-flow-header');
+        const text = header.querySelector('.thinking-text');
+        const bar = header.querySelector('.thinking-mini-progress .bar');
+        const { planned, completed, error, started } = this.toolStats;
+        const total = planned || Math.max(started, completed + error);
+        const done = completed + error;
+        const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+        if (bar) {
+            bar.style.width = pct + '%';
+        }
+        const pieces = [];
+        if (total > 0) pieces.push(`工具 ${done}/${total}`);
+        if (error > 0) pieces.push(`${error} 个错误`);
+        text.textContent = pieces.length ? pieces.join(' · ') : '处理中...';
     }
 
     // 切换思维流显示状态
@@ -364,13 +397,13 @@ class ThinkingFlow {
             toggleText.textContent = '展开';
         } else {
             toggleIcon.textContent = '▼';
-            toggleText.textContent = '收起';
+            toggleText.textContent = '折叠';
         }
     }
 
     // 格式化数据大小显示
     formatDataSize(bytes) {
-        if (bytes < 1024) return bytes + ' 字符';
+        if (bytes < 1024) return bytes + ' characters';
         const kb = (bytes / 1024).toFixed(2);
         return `${kb} KB`;
     }

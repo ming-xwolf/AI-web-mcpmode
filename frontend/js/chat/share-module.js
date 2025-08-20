@@ -15,7 +15,7 @@ class ShareModule {
     
     shareChat() {
         if (!this.chatApp.sessionId) {
-            this.chatApp.showError('无法分享：当前没有活跃的对话会话');
+            this.chatApp.showError('无法分享：没有活跃的对话会话');
             return;
         }
         
@@ -32,24 +32,26 @@ class ShareModule {
         modal.className = 'share-modal';
         modal.innerHTML = `
             <div class="share-modal-content">
-                <div class="share-modal-header">
-                    <h3>🔗 分享对话</h3>
-                    <button class="share-modal-close">&times;</button>
+            <div class="share-modal-header">
+                <h3>🔗 分享对话</h3>
+                <button class="share-modal-close">&times;</button>
+            </div>
+            <div class="share-modal-body">
+                <p>通过以下链接分享当前对话：</p>
+                <div class="share-url-container">
+                    <input type="text" class="share-url-input" value="${shareUrl}" readonly>
+                    <button class="share-copy-btn">复制</button>
                 </div>
-                <div class="share-modal-body">
-                    <p>通过以下链接分享当前对话：</p>
-                    <div class="share-url-container">
-                        <input type="text" class="share-url-input" value="${shareUrl}" readonly>
-                        <button class="share-copy-btn">复制</button>
-                    </div>
-                    <div class="share-notice">
-                        <p><strong>注意事项：</strong></p>
-                        <ul>
-                            <li>分享的对话为只读模式，其他人无法在此基础上继续对话</li>
-                            <li>请确保对话内容不包含敏感信息</li>
-                            <li>分享链接包含完整的对话历史记录</li>
-                        </ul>
-                    </div>
+                <div class="share-notice">
+                    <p><strong>注意事项：</strong></p>
+                    <ul>
+                        <li>分享的对话是只读的，他人无法继续对话</li>
+                        <li>请勿分享敏感信息</li>
+                        <li>分享链接包含完整的对话历史</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
                 </div>
             </div>
         `;

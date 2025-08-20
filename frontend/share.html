@@ -3,61 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>分享的对话 - MCP Web 智能助手</title>
+    <title>分享的对话 - MCP 智能助手</title>
     <link rel="stylesheet" href="css/style.css">
-    <!-- 引入marked.js用于markdown解析 -->
+    <!-- Include marked.js for markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
 </head>
 <body>
     <div class="app-container">
-        <!-- 顶部导航栏 -->
+        <!-- Top navigation bar -->
         <header class="header">
             <div class="header-content">
                 <h1 class="app-title">🔗 分享的对话</h1>
                 <div class="header-actions">
                     <div class="share-info-badge">
-                        <span class="readonly-badge">只读模式</span>
+                        <span class="readonly-badge">只读</span>
                     </div>
                     <a href="index.html" class="btn btn-primary">开始新对话</a>
                 </div>
             </div>
         </header>
 
-        <!-- 主要内容区域 -->
+        <!-- Main content area -->
         <main class="main-content">
-            <!-- 加载状态 -->
+            <!-- Loading status -->
             <div id="loadingOverlay" class="loading-overlay">
                 <div>正在加载分享的对话...</div>
             </div>
 
-            <!-- 聊天消息区域 -->
+            <!-- Chat messages area -->
             <div class="chat-messages" id="chatMessages">
-                <!-- 消息将通过JavaScript动态加载 -->
+                <!-- Messages will be loaded dynamically via JavaScript -->
             </div>
 
-            <!-- 分享信息栏 -->
+            <!-- Share info bar -->
             <div class="share-footer">
                 <div class="share-footer-content">
-                    <p>📢 这是一个分享的对话记录，您只能查看内容，无法继续对话。</p>
-                    <p>想要开始自己的对话？<a href="index.html">点击这里</a></p>
+                    <p>📢 此页面以只读模式显示分享的对话。您无法在此处继续聊天。</p>
+                    <p>想要开始新的对话？ <a href="index.html">前往聊天</a></p>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- 引入配置管理器 -->
+    <!-- Include config manager -->
     <script src="js/config.js"></script>
     <script src="js/chat/thinking-flow.js"></script>
     <script src="js/share.js"></script>
     <script>
-        // 初始化分享应用
+        // Initialize share app
         document.addEventListener('DOMContentLoaded', () => {
             window.shareApp = new ShareApp();
         });
     </script>
 
     <style>
-        /* 分享页面特定样式 */
+        /* Share page specific styles */
         .readonly-badge {
             background: #ed8936;
             color: white;
@@ -94,14 +94,14 @@
             text-decoration: underline;
         }
         
-        /* 确保主容器占满高度 */
+        /* Ensure main container fills height */
         .app-container {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
         
-        /* 固定header到顶部 - 使用!important确保优先级 */
+        /* Fix header to top - use !important for priority */
         .header {
             position: fixed !important;
             top: 0 !important;
@@ -119,9 +119,9 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            margin-top: 80px; /* 为固定header留出空间 */
-            margin-bottom: 100px; /* 为固定footer留出空间 */
-            height: calc(100vh - 180px); /* 设置固定高度 */
+            margin-top: 80px; /* Leave space for fixed header */
+            margin-bottom: 100px; /* Leave space for fixed footer */
+            height: calc(100vh - 180px); /* Set fixed height */
             overflow: hidden;
         }
         
@@ -130,11 +130,11 @@
             overflow-y: auto;
             overflow-x: hidden;
             padding: 1rem;
-            height: 100%; /* 占满父容器 */
-            -webkit-overflow-scrolling: touch; /* 移动端滚动优化 */
+            height: 100%; /* Fill parent container */
+            -webkit-overflow-scrolling: touch; /* Mobile scroll optimization */
         }
         
-        /* 固定footer到底部 - 使用!important确保优先级 */
+        /* Fix footer to bottom - use !important for priority */
         .share-footer {
             position: fixed !important;
             bottom: 0 !important;
@@ -148,7 +148,7 @@
             margin-top: auto !important;
         }
         
-        /* 错误状态样式 */
+        /* Error state styles */
         .error-message {
             text-align: center;
             padding: 2rem;
@@ -164,7 +164,7 @@
             color: #718096;
         }
         
-        /* 空状态样式 */
+        /* Empty state styles */
         .empty-state {
             text-align: center;
             padding: 3rem 1rem;
