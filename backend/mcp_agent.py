@@ -455,7 +455,6 @@ class WebMCPAgent:
         return sanitized
 
     async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
-    async def chat_stream(self, user_input: str, history: List[Dict[str, Any]] = None, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """流式探测 + 立即中断：
         - 先直接 astream 开流，短暂缓冲并检测 function_call/tool_call；
         - 若检测到工具调用：立即中断本次流式（不下发缓冲），执行工具（非流式），写回 messages 后进入下一轮；
