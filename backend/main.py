@@ -11,21 +11,73 @@ from typing import List, Dict, Any
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 import os
 from dotenv import load_dotenv, find_dotenv
 import uvicorn
 
 from mcp_agent import WebMCPAgent
 from database import ChatDatabase
+from typing import Optional
 
 # 全局变量
 mcp_agent = None
 chat_db = None  # SQLite数据库实例
 active_connections: List[WebSocket] = []
+
+# 用户认证相关的Pydantic模型
+class UserRegister(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+
+# 认证依赖函数
+async def get_current_user(authorization: Optional[str] = Header(None)):
+    """获取当前用户信息"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未提供认证令牌")
+    
+    try:
+        # 提取Bearer token
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="无效的认证格式")
+        
+        token = authorization.split(" ")[1]
+        user_info = await chat_db.verify_token(token)
+        
+        if not user_info:
+            raise HTTPException(status_code=401, detail="无效或过期的令牌")
+        
+        return user_info
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="认证失败")
+
+async def get_optional_user(authorization: Optional[str] = Header(None)):
+    """可选的用户认证，不强制要求登录"""
+    if not authorization:
+        return None
+    
+    try:
+        if not authorization.startswith("Bearer "):
+            return None
+        
+        token = authorization.split(" ")[1]
+        return await chat_db.verify_token(token)
+    except:
+        return None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -533,6 +585,70 @@ async def get_shared_chat(session_id: str, limit: int = 100):
 
 # 如果要让FastAPI直接服务前端文件，取消下面的注释
 # app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+
+# 用户认证API路由
+@app.post("/api/auth/register")
+async def register(user_data: UserRegister):
+    """用户注册"""
+    try:
+        result = await chat_db.register_user(
+            username=user_data.username,
+            email=user_data.email,
+            password=user_data.password
+        )
+        return result
+    except Exception as e:
+        print(f"❌ 注册API错误: {e}")
+        raise HTTPException(status_code=500, detail="注册失败")
+
+@app.post("/api/auth/login")
+async def login(user_data: UserLogin):
+    """用户登录"""
+    try:
+        result = await chat_db.login_user(
+            username=user_data.username,
+            password=user_data.password
+        )
+        return result
+    except Exception as e:
+        print(f"❌ 登录API错误: {e}")
+        raise HTTPException(status_code=500, detail="登录失败")
+
+@app.post("/api/auth/logout")
+async def logout(current_user: dict = Depends(get_current_user), authorization: str = Header(...)):
+    """用户登出"""
+    try:
+        token = authorization.split(" ")[1]
+        success = await chat_db.logout_user(token)
+        if success:
+            return {"success": True, "message": "登出成功"}
+        else:
+            raise HTTPException(status_code=500, detail="登出失败")
+    except Exception as e:
+        print(f"❌ 登出API错误: {e}")
+        raise HTTPException(status_code=500, detail="登出失败")
+
+@app.get("/api/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """获取当前用户信息"""
+    try:
+        return {
+            "success": True,
+            "user": {
+                "id": current_user["user_id"],
+                "username": current_user["username"],
+                "email": current_user["email"]
+            }
+        }
+    except Exception as e:
+        print(f"❌ 获取用户信息API错误: {e}")
+        raise HTTPException(status_code=500, detail="获取用户信息失败")
+
+@app.get("/api/auth/verify")
+async def verify_token(current_user: dict = Depends(get_current_user)):
+    """验证令牌有效性"""
+    return {"success": True, "valid": True, "user_id": current_user["user_id"]}
+
 
 if __name__ == "__main__":
     # 开发环境启动

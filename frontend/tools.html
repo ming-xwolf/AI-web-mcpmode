@@ -1,12 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工具 - MCP 智能助手</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/tools.css">
+    <link rel="stylesheet" href="css/auth.css">
     <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -14,6 +16,30 @@
             <div class="header-content">
                 <h1 class="app-title">🛠️ 工具</h1>
                 <div class="header-actions">
+                    <!-- 用户信息区域 -->
+                    <div class="user-info" id="userInfo" style="display: none;">
+                        <div class="user-avatar">
+                            <span id="userInitial">U</span>
+                        </div>
+                        <div class="user-dropdown">
+                            <button id="userDropdownBtn" class="btn btn-secondary">
+                                <span id="userName">用户</span> ▾
+                            </button>
+                            <div id="userDropdown" class="dropdown-menu" style="display:none">
+                                <a href="#" id="userProfileBtn">个人资料</a>
+                                <a href="#" id="userSettingsBtn">设置</a>
+                                <hr>
+                                <a href="#" id="logoutBtn">登出</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 登录按钮 -->
+                    <div class="auth-buttons" id="authButtons">
+                        <a href="login.html" class="btn btn-primary">登录</a>
+                        <a href="register.html" class="btn btn-secondary">注册</a>
+                    </div>
+                    
                     <a href="index.html" class="btn btn-primary">返回对话</a>
                 </div>
             </div>
@@ -34,6 +60,50 @@
     </div>
 
     <script>
+        // 页面加载完成后检查认证状态
+        document.addEventListener('DOMContentLoaded', async function() {
+            const user = await checkAuthStatus();
+            updateUIForAuthStatus(user);
+            loadTools();
+        });
+
+        // 更新UI以反映认证状态
+        function updateUIForAuthStatus(user) {
+            const userInfo = document.getElementById('userInfo');
+            const authButtons = document.getElementById('authButtons');
+            const userName = document.getElementById('userName');
+            const userInitial = document.getElementById('userInitial');
+
+            if (user) {
+                // 用户已登录
+                userInfo.style.display = 'flex';
+                authButtons.style.display = 'none';
+                userName.textContent = user.username;
+                userInitial.textContent = user.username.charAt(0).toUpperCase();
+            } else {
+                // 用户未登录
+                userInfo.style.display = 'none';
+                authButtons.style.display = 'flex';
+            }
+        }
+
+        // 用户下拉菜单事件
+        document.addEventListener('click', function(e) {
+            const userDropdownBtn = document.getElementById('userDropdownBtn');
+            const userDropdown = document.getElementById('userDropdown');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            if (e.target === userDropdownBtn || userDropdownBtn.contains(e.target)) {
+                e.preventDefault();
+                userDropdown.style.display = userDropdown.style.display === 'none' ? 'block' : 'none';
+            } else if (e.target === logoutBtn) {
+                e.preventDefault();
+                logout();
+            } else {
+                userDropdown.style.display = 'none';
+            }
+        });
+
         // 加载工具列表
         async function loadTools() {
             try {

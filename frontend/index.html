@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCP 智能助手</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/auth.css">
     <!-- Include marked.js for markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <!-- Include html2canvas for screenshots -->
@@ -33,6 +34,30 @@
                     </div>
                     <button id="startNewChatBtn" class="btn btn-secondary">新建对话</button>
                     <button id="shareChatBtn" class="btn btn-secondary">分享对话</button>
+
+                    <!-- 用户信息区域 -->
+                    <div class="user-info" id="userInfo" style="display: none;">
+                        <div class="user-avatar">
+                            <span id="userInitial">U</span>
+                        </div>
+                        <div class="user-dropdown">
+                            <button id="userDropdownBtn" class="btn btn-secondary">
+                                <span id="userName">用户</span> ▾
+                            </button>
+                            <div id="userDropdown" class="dropdown-menu" style="display:none">
+                                <a href="#" id="userProfileBtn">个人资料</a>
+                                <a href="#" id="userSettingsBtn">设置</a>
+                                <hr>
+                                <a href="#" id="logoutBtn">登出</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 登录按钮 -->
+                    <div class="auth-buttons" id="authButtons">
+                        <a href="login.html" class="btn btn-primary">登录</a>
+                        <a href="register.html" class="btn btn-secondary">注册</a>
+                    </div>
 
                     <div class="status-indicator">
                         <span id="connectionStatus" class="status-dot offline"></span>
@@ -82,9 +107,54 @@
 
     <!-- JavaScript -->
     <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/ws.js"></script>
     <script src="js/chat/thinking-flow.js"></script>
     <script src="js/chat/share-module.js"></script>
     <script src="js/chat.js"></script>
+    <script>
+        // 页面加载完成后检查认证状态
+        document.addEventListener('DOMContentLoaded', async function() {
+            const user = await checkAuthStatus();
+            updateUIForAuthStatus(user);
+        });
+
+        // 更新UI以反映认证状态
+        function updateUIForAuthStatus(user) {
+            const userInfo = document.getElementById('userInfo');
+            const authButtons = document.getElementById('authButtons');
+            const userName = document.getElementById('userName');
+            const userInitial = document.getElementById('userInitial');
+
+            if (user) {
+                // 用户已登录
+                userInfo.style.display = 'flex';
+                authButtons.style.display = 'none';
+                userName.textContent = user.username;
+                userInitial.textContent = user.username.charAt(0).toUpperCase();
+            } else {
+                // 用户未登录
+                userInfo.style.display = 'none';
+                authButtons.style.display = 'flex';
+            }
+        }
+
+        // 用户下拉菜单事件
+        document.addEventListener('click', function(e) {
+            const userDropdownBtn = document.getElementById('userDropdownBtn');
+            const userDropdown = document.getElementById('userDropdown');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            if (e.target === userDropdownBtn || userDropdownBtn.contains(e.target)) {
+                e.preventDefault();
+                userDropdown.style.display = userDropdown.style.display === 'none' ? 'block' : 'none';
+            } else if (e.target === logoutBtn) {
+                e.preventDefault();
+                logout();
+            } else {
+                userDropdown.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
