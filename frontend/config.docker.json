@@ -1,0 +1,13 @@
+{
+  "backend": {
+    "host": "",
+    "port": 0,
+    "protocol": "",
+    "wsProtocol": ""
+  },
+  "api": {
+    "baseUrl": "",
+    "wsUrl": ""
+  },
+  "note": "When served through the provided nginx proxy, frontend should use relative paths like /api and /ws/chat. Leave values empty to fallback to relative paths in frontend logic."
+}
