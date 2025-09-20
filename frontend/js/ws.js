@@ -35,19 +35,32 @@ class WebSocketManager {
             // 将页面 URL 的 msid 透传到 WebSocket 连接
             try {
                 const urlParams = new URLSearchParams(window.location.search || '');
-                const msid = urlParams.get('msid');
-                if (msid) {
-                    const hasQuery = this.url.includes('?');
-                    this.url = this.url + (hasQuery ? '&' : '?') + 'msid=' + encodeURIComponent(msid);
+                let msid = urlParams.get('msid');
+                
+                // 如果没有msid参数，生成一个默认的会话ID
+                if (!msid) {
+                    msid = 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
                 }
+                
+                const hasQuery = this.url.includes('?');
+                this.url = this.url + (hasQuery ? '&' : '?') + 'msid=' + encodeURIComponent(msid);
+                
                 // 透传模型档位（若有选择）
-                const chosenModel = localStorage.getItem('mcp_selected_model');
-                if (chosenModel) {
-                    const hasQuery2 = this.url.includes('?');
-                    this.url = this.url + (hasQuery2 ? '&' : '?') + 'model=' + encodeURIComponent(chosenModel);
+                let chosenModel = localStorage.getItem('mcp_selected_model');
+                if (!chosenModel) {
+                    // 如果没有选择的模型，使用默认模型
+                    chosenModel = 'deepseek-chat';
                 }
+                
+                const hasQuery2 = this.url.includes('?');
+                this.url = this.url + (hasQuery2 ? '&' : '?') + 'model=' + encodeURIComponent(chosenModel);
+                
+                console.log('🔧 WebSocket URL 构建完成:', this.url);
             } catch (e) {
-                console.warn('⚠️ 解析页面 msid 失败，将不透传:', e);
+                console.warn('⚠️ 解析页面参数失败，使用默认值:', e);
+                // 即使出错也要添加基本参数
+                const hasQuery = this.url.includes('?');
+                this.url = this.url + (hasQuery ? '&' : '?') + 'msid=session-' + Date.now() + '&model=deepseek-chat';
             }
             this.isInitialized = true;
             

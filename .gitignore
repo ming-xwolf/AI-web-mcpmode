@@ -31,3 +31,5 @@ frontend.zip
 /工作任务跟踪表*
 *.csv
 .git1.zip
+/backend/__pycache__/
+/frontend/__pycache__/

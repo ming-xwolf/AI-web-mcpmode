@@ -1,0 +1,62 @@
+# Cursor Rules for AI-web-mcpmode Project
+
+## Python Environment Management
+- ALWAYS activate the conda virtual environment `ai-web-mcpmode` before executing any Python commands
+- Use `conda activate ai-web-mcpmode` before running Python scripts, pip installs, or any Python-related operations
+- When running terminal commands that involve Python, ensure the environment is activated first
+- The project uses Python 3.11 in the conda environment
+
+## Project Structure
+- Backend: FastAPI application in `/backend` directory
+- Frontend: Static HTML/CSS/JS in `/frontend` directory
+- Database: SQLite database for chat history and user management
+- MCP Integration: Model Context Protocol for tool calling
+
+## Development Guidelines
+- Always work within the activated conda environment
+- Use `uvicorn main:app --reload --host 0.0.0.0 --port 8003` to run the backend server
+- Frontend can be served with `python -m http.server 3000` from the frontend directory
+- Check `backend/requirements.txt` for Python dependencies
+- Configuration files: `backend/mcp.json` and `frontend/config.json`
+
+## Code Quality
+- Follow clean code principles as defined in user rules
+- Use meaningful variable and function names
+- Add comments for complex logic
+- Maintain single responsibility principle
+- Keep functions small and focused
+
+## Environment Variables
+- Create `.env` file in project root for API keys and configuration
+- Required: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`
+- Optional: `BACKEND_PORT` (default: 8003)
+
+## MCP Tools
+- MCP servers are configured in `backend/mcp.json`
+- Tools are automatically loaded from configured servers
+- Support for financial data, analysis tools, and custom MCP services
+
+## Database
+- SQLite database for chat history and user authentication
+- User management with JWT tokens
+- Conversation storage with tool call tracking
+
+## Security
+- Use environment variables for sensitive data
+- Implement proper authentication and authorization
+- Validate user inputs
+- Use HTTPS in production
+
+## Testing
+- Test WebSocket connections
+- Verify MCP tool integrations
+- Check database operations
+- Validate user authentication flows
+
+## Deployment
+- Use Docker for containerization
+- Configure Nginx for reverse proxy
+- Set up proper logging and monitoring
+- Implement health checks
+
+Remember: ALWAYS activate the conda environment before any Python operations!

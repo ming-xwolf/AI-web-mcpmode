@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 调试</title>
+</head>
+<body>
+    <h1>WebSocket 连接调试</h1>
+    <div id="status">准备连接...</div>
+    <div id="messages"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        function addMessage(message) {
+            const p = document.createElement('p');
+            p.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            messagesDiv.appendChild(p);
+        }
+        
+        function updateStatus(status) {
+            statusDiv.textContent = status;
+        }
+        
+        // 测试WebSocket连接
+        function testWebSocket() {
+            updateStatus('正在连接...');
+            addMessage('开始测试WebSocket连接');
+            
+            const ws = new WebSocket('ws://localhost:8003/ws/chat');
+            
+            ws.onopen = function(event) {
+                updateStatus('✅ 连接成功');
+                addMessage('WebSocket连接已建立');
+            };
+            
+            ws.onmessage = function(event) {
+                addMessage('收到消息: ' + event.data);
+            };
+            
+            ws.onclose = function(event) {
+                updateStatus('❌ 连接关闭');
+                addMessage('WebSocket连接已关闭: ' + event.code + ' - ' + event.reason);
+            };
+            
+            ws.onerror = function(error) {
+                updateStatus('❌ 连接错误');
+                addMessage('WebSocket错误: ' + error);
+            };
+        }
+        
+        // 页面加载后自动测试
+        window.onload = testWebSocket;
+    </script>
+</body>
+</html>
