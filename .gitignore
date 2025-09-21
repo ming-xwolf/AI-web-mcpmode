@@ -33,3 +33,7 @@ frontend.zip
 .git1.zip
 /backend/__pycache__/
 /frontend/__pycache__/
+*.pid
+# 忽略日志文件
+logs/
+*.log
