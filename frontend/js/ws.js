@@ -39,7 +39,16 @@ class WebSocketManager {
                 
                 // 如果没有msid参数，生成一个默认的会话ID
                 if (!msid) {
-                    msid = 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                    const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
+                    if (userInfo.id) {
+                        // 用户已登录，使用用户ID作为msid
+                        msid = userInfo.id.toString();
+                        console.log('🔐 用户已登录，使用用户ID作为msid:', msid);
+                    } else {
+                        // 用户未登录，生成随机msid
+                        msid = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                        console.log('👤 用户未登录，生成随机msid:', msid);
+                    }
                 }
                 
                 const hasQuery = this.url.includes('?');
@@ -55,12 +64,21 @@ class WebSocketManager {
                 const hasQuery2 = this.url.includes('?');
                 this.url = this.url + (hasQuery2 ? '&' : '?') + 'model=' + encodeURIComponent(chosenModel);
                 
+                // 添加用户认证token（如果有的话）
+                const token = localStorage.getItem('auth_token');
+                if (token) {
+                    const hasQuery3 = this.url.includes('?');
+                    this.url = this.url + (hasQuery3 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+                }
+                
                 console.log('🔧 WebSocket URL 构建完成:', this.url);
             } catch (e) {
                 console.warn('⚠️ 解析页面参数失败，使用默认值:', e);
                 // 即使出错也要添加基本参数
                 const hasQuery = this.url.includes('?');
-                this.url = this.url + (hasQuery ? '&' : '?') + 'msid=session-' + Date.now() + '&model=deepseek-chat';
+                const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
+                const fallbackMsid = userInfo.id ? userInfo.id.toString() : 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                this.url = this.url + (hasQuery ? '&' : '?') + 'msid=' + fallbackMsid + '&model=deepseek-chat';
             }
             this.isInitialized = true;
             

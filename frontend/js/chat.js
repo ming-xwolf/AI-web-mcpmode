@@ -169,15 +169,37 @@ class ChatApp {
 
     async loadThreadsByMsidFromUrl() {
         try {
+            // 优先从URL参数获取msid
             const urlParams = new URLSearchParams(window.location.search || '');
-            const msid = urlParams.get('msid');
-            if (!msid) return;
+            let msid = urlParams.get('msid');
+            
+            // 如果URL中没有msid，根据用户登录状态生成
+            if (!msid) {
+                const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
+                if (userInfo.id) {
+                    // 用户已登录，使用用户ID
+                    msid = userInfo.id.toString();
+                    console.log('🔐 用户已登录，使用用户ID加载历史记录:', msid);
+                } else {
+                    // 用户未登录，生成随机msid（与WebSocket连接保持一致）
+                    msid = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    console.log('👤 用户未登录，生成随机msid加载历史记录:', msid);
+                }
+            }
+            
             const apiUrl = window.configManager.getFullApiUrl(`/api/threads?msid=${encodeURIComponent(msid)}`);
+            console.log('🔍 加载历史记录API:', apiUrl);
             const res = await fetch(apiUrl, { cache: 'no-store' });
             const json = await res.json();
-            if (!json.success) return;
+            if (!json.success) {
+                console.warn('加载历史记录失败:', json);
+                return;
+            }
+            console.log('✅ 成功加载历史记录:', json.data?.length || 0, '条');
             this.renderThreads(json.data || []);
-        } catch (e) { console.warn('加载线程列表失败', e); }
+        } catch (e) { 
+            console.warn('加载线程列表失败', e); 
+        }
     }
 
     renderThreads(threads) {
@@ -695,6 +717,9 @@ class ChatApp {
             this.wsManager = new WebSocketManager();
             this.setupWebSocket();
             await this.connectWebSocket();
+            
+            // 5. 重新加载历史记录
+            await this.loadThreadsByMsidFromUrl();
             
             console.log('✅ 新建对话完成，新会话ID:', this.sessionId);
             

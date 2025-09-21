@@ -197,16 +197,26 @@ manager = ConnectionManager()
 async def websocket_chat(websocket: WebSocket):
     """WebSocket聊天接口"""
     session_id = await manager.connect(websocket)
-    # 从连接查询参数中读取 msid 与 model 并保存到会话上下文（后端隐藏使用，不回传给前端）
+    # 从连接查询参数中读取 msid、model 和 token 并保存到会话上下文
     try:
         print(f"🔍 WebSocket 查询参数: {dict(websocket.query_params)}")
         msid_param = websocket.query_params.get("msid")
         model_param = websocket.query_params.get("model")
+        token_param = websocket.query_params.get("token")
         print(f"🔍 提取的 msid 参数: {msid_param}")
         print(f"🔍 提取的 model 参数: {model_param}")
+        print(f"🔍 提取的 token 参数: {token_param[:20] + '...' if token_param else None}")
         if msid_param is not None and msid_param != "":
             try:
-                msid_value = int(msid_param)
+                # 尝试解析为整数，如果失败则使用字符串的哈希值
+                try:
+                    msid_value = int(msid_param)
+                    print(f"🔧 解析整数msid: {msid_param} -> {msid_value}")
+                except ValueError:
+                    # 如果无法解析为整数，使用字符串的哈希值作为msid
+                    msid_value = hash(msid_param) % (2**31)  # 确保在32位整数范围内
+                    print(f"🔧 将字符串msid转换为整数: {msid_param} -> {msid_value}")
+                
                 if not hasattr(mcp_agent, 'session_contexts'):
                     mcp_agent.session_contexts = {}
                 mcp_agent.session_contexts[session_id] = {"msid": msid_value}
@@ -235,6 +245,24 @@ async def websocket_chat(websocket: WebSocket):
                 print(f"🔐 已为会话 {session_id} 记录 model={model_param}")
         except Exception as e:
             print(f"⚠️ 记录 model 失败: {e}")
+        
+        # 处理用户认证（如果提供token）
+        user_info = None
+        try:
+            if token_param is not None and token_param != "":
+                user_info = await chat_db.verify_token(token_param)
+                if user_info:
+                    if not hasattr(mcp_agent, 'session_contexts'):
+                        mcp_agent.session_contexts = {}
+                    session_ctx = mcp_agent.session_contexts.get(session_id, {})
+                    session_ctx["user_id"] = user_info["user_id"]
+                    session_ctx["username"] = user_info["username"]
+                    mcp_agent.session_contexts[session_id] = session_ctx
+                    print(f"🔐 已为会话 {session_id} 记录用户信息: {user_info['username']} (ID: {user_info['user_id']})")
+                else:
+                    print(f"⚠️ Token验证失败，用户未认证")
+        except Exception as e:
+            print(f"⚠️ 处理用户认证失败: {e}")
     except Exception as _e:
         print(f"❌ 处理 msid 参数异常: {_e}")
         if not hasattr(mcp_agent, 'session_contexts'):
@@ -363,13 +391,29 @@ async def websocket_chat(websocket: WebSocket):
                     # 保存完整对话到数据库
                     if chat_db:
                         try:
+                            # 智能选择msid：如果用户已登录则使用用户ID，否则使用原msid
+                            session_ctx = mcp_agent.session_contexts.get(current_session_id, {}) if hasattr(mcp_agent, 'session_contexts') else {}
+                            user_id = session_ctx.get("user_id")
+                            original_msid = session_ctx.get("msid")
+                            
+                            if user_id:
+                                # 用户已登录，使用用户ID作为msid
+                                msid_value = user_id
+                                print(f"🔐 用户已登录，使用用户ID作为msid: {msid_value}")
+                            else:
+                                # 用户未登录，使用原msid（可能是游客ID）
+                                msid_value = original_msid
+                                print(f"👤 用户未登录，使用原msid: {msid_value}")
+                            
+                            print(f"🔍 保存对话记录 - 用户ID: {user_id}, 原msid: {original_msid}, 最终msid: {msid_value}")
+                            
                             success = await chat_db.save_conversation(
                                 user_input=conversation_data["user_input"],
                                 mcp_tools_called=conversation_data["mcp_tools_called"],
                                 mcp_results=conversation_data["mcp_results"],
                                 ai_response=ai_response,
                                 session_id=current_session_id,
-                                msid=mcp_agent.session_contexts.get(current_session_id, {}).get("msid") if hasattr(mcp_agent, 'session_contexts') else None
+                                msid=msid_value
                             )
                             if success:
                                 print(f"✅ 对话记录保存成功")

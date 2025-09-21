@@ -54,6 +54,7 @@ stop_service() {
                 local process_info=$(ps -p "$port_pid" -o comm= 2>/dev/null || echo "")
                 if [[ "$process_info" == *"uvicorn"* ]] || [[ "$process_info" == *"python"* ]]; then
                     service_pid="$port_pid"
+                    print_message $YELLOW "  (通过端口检测发现进程)"
                 fi
             fi
         fi
@@ -62,8 +63,14 @@ stop_service() {
         if [ -z "$service_pid" ]; then
             if [ "$service_name" = "后端" ]; then
                 service_pid=$(pgrep -f "uvicorn main:app" 2>/dev/null | head -1 || true)
+                if [ -n "$service_pid" ]; then
+                    print_message $YELLOW "  (通过进程名称检测发现进程)"
+                fi
             elif [ "$service_name" = "前端" ]; then
                 service_pid=$(pgrep -f "python -m http.server 3000" 2>/dev/null | head -1 || true)
+                if [ -n "$service_pid" ]; then
+                    print_message $YELLOW "  (通过进程名称检测发现进程)"
+                fi
             fi
         fi
     fi
@@ -111,11 +118,22 @@ stop_service() {
 stop_all_processes() {
     print_message $BLUE "检查并停止所有相关进程..."
     
+    local found_any=false
+    
     # 停止uvicorn进程
     local uvicorn_pids=$(pgrep -f "uvicorn main:app" 2>/dev/null || true)
     if [ -n "$uvicorn_pids" ]; then
         print_message $BLUE "发现uvicorn进程，正在停止..."
         echo "$uvicorn_pids" | xargs kill 2>/dev/null || true
+        found_any=true
+        
+        # 等待进程结束
+        sleep 2
+        local remaining_uvicorn=$(pgrep -f "uvicorn main:app" 2>/dev/null || true)
+        if [ -n "$remaining_uvicorn" ]; then
+            print_message $YELLOW "强制停止uvicorn进程..."
+            echo "$remaining_uvicorn" | xargs kill -9 2>/dev/null || true
+        fi
     fi
     
     # 停止Python HTTP服务器进程
@@ -123,19 +141,50 @@ stop_all_processes() {
     if [ -n "$http_pids" ]; then
         print_message $BLUE "发现HTTP服务器进程，正在停止..."
         echo "$http_pids" | xargs kill 2>/dev/null || true
+        found_any=true
+        
+        # 等待进程结束
+        sleep 2
+        local remaining_http=$(pgrep -f "python -m http.server 3000" 2>/dev/null || true)
+        if [ -n "$remaining_http" ]; then
+            print_message $YELLOW "强制停止HTTP服务器进程..."
+            echo "$remaining_http" | xargs kill -9 2>/dev/null || true
+        fi
     fi
     
     # 停止端口占用的进程
     local port_8003_pid=$(lsof -ti:8003 2>/dev/null || true)
     if [ -n "$port_8003_pid" ]; then
-        print_message $BLUE "发现端口8003占用进程，正在停止..."
+        print_message $BLUE "发现端口8003占用进程 (PID: $port_8003_pid)，正在停止..."
         kill "$port_8003_pid" 2>/dev/null || true
+        found_any=true
+        
+        # 等待进程结束
+        sleep 2
+        if ps -p "$port_8003_pid" > /dev/null 2>&1; then
+            print_message $YELLOW "强制停止端口8003进程..."
+            kill -9 "$port_8003_pid" 2>/dev/null || true
+        fi
     fi
     
     local port_3000_pid=$(lsof -ti:3000 2>/dev/null || true)
     if [ -n "$port_3000_pid" ]; then
-        print_message $BLUE "发现端口3000占用进程，正在停止..."
+        print_message $BLUE "发现端口3000占用进程 (PID: $port_3000_pid)，正在停止..."
         kill "$port_3000_pid" 2>/dev/null || true
+        found_any=true
+        
+        # 等待进程结束
+        sleep 2
+        if ps -p "$port_3000_pid" > /dev/null 2>&1; then
+            print_message $YELLOW "强制停止端口3000进程..."
+            kill -9 "$port_3000_pid" 2>/dev/null || true
+        fi
+    fi
+    
+    if [ "$found_any" = true ]; then
+        print_message $GREEN "所有相关进程已停止"
+    else
+        print_message $YELLOW "未发现需要停止的进程"
     fi
 }
 
@@ -167,8 +216,25 @@ main() {
     case $action in
         "stop")
             print_message $GREEN "=== AI Web MCP Mode 服务停止 ==="
-            stop_service "$BACKEND_PID_FILE" "后端" "8003"
-            stop_service "$FRONTEND_PID_FILE" "前端" "3000"
+            local backend_stopped=false
+            local frontend_stopped=false
+            
+            # 尝试停止后端服务
+            if stop_service "$BACKEND_PID_FILE" "后端" "8003"; then
+                backend_stopped=true
+            fi
+            
+            # 尝试停止前端服务
+            if stop_service "$FRONTEND_PID_FILE" "前端" "3000"; then
+                frontend_stopped=true
+            fi
+            
+            # 如果通过PID文件没有停止任何服务，尝试停止所有相关进程
+            if [ "$backend_stopped" = false ] && [ "$frontend_stopped" = false ]; then
+                print_message $YELLOW "未找到PID文件管理的服务，尝试停止所有相关进程..."
+                stop_all_processes
+            fi
+            
             print_message $GREEN "=== 所有服务停止完成 ==="
             ;;
         "backend")

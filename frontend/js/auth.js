@@ -289,8 +289,12 @@ function initLogin() {
                 password: password
             });
             
-            // 保存令牌
+            // 保存令牌和用户信息
             AuthUtils.setToken(response.token);
+            if (response.user) {
+                localStorage.setItem('user_info', JSON.stringify(response.user));
+                console.log('🔐 用户信息已保存:', response.user);
+            }
             
             // 显示成功消息
             AuthUtils.showSuccess('登录成功！正在跳转...');
@@ -467,8 +471,10 @@ async function logout() {
     } catch (error) {
         console.error('登出请求失败:', error);
     } finally {
-        // 无论请求是否成功，都清除本地令牌
+        // 无论请求是否成功，都清除本地令牌和用户信息
         AuthUtils.removeToken();
+        localStorage.removeItem('user_info');
+        console.log('👤 用户信息已清除');
         window.location.href = 'login.html';
     }
 }
