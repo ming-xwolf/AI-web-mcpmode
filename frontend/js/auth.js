@@ -121,6 +121,12 @@ const AuthUtils = {
 const AuthAPI = {
     // 发送请求
     request: async function(url, options = {}) {
+        // 确保配置已加载
+        await window.configManager.loadConfig();
+        
+        // 构建完整的API URL
+        const fullUrl = window.configManager.getFullApiUrl(url);
+        
         const defaultOptions = {
             headers: {
                 'Content-Type': 'application/json'
@@ -143,11 +149,17 @@ const AuthAPI = {
         };
 
         try {
-            const response = await fetch(url, finalOptions);
+            console.log('发送API请求到:', fullUrl);
+            const response = await fetch(fullUrl, finalOptions);
             const data = await response.json();
             
             if (!response.ok) {
                 throw new Error(data.detail || '请求失败');
+            }
+            
+            // 检查响应体中的success字段
+            if (data.success === false) {
+                throw new Error(data.message || '操作失败');
             }
             
             return data;
@@ -278,7 +290,7 @@ function initLogin() {
             });
             
             // 保存令牌
-            AuthUtils.setToken(response.access_token);
+            AuthUtils.setToken(response.token);
             
             // 显示成功消息
             AuthUtils.showSuccess('登录成功！正在跳转...');
@@ -414,7 +426,7 @@ function initRegister() {
             hasError = true;
         }
         
-        if (!agreeTerms) {
+        if (!agreeTerms || agreeTerms !== 'on') {
             AuthUtils.showError('请同意服务条款和隐私政策');
             hasError = true;
         }
