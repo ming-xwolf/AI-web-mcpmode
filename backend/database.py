@@ -31,7 +31,8 @@ class ChatDatabase:
             db_path = Path(__file__).parent / db_path
         
         self.db_path = str(db_path)
-        self.secret_key = secret_key or secrets.token_urlsafe(32)
+        # 使用固定的JWT密钥，确保重启后令牌仍然有效
+        self.secret_key = secret_key or "mcp-web-assistant-secret-key-2024"
         print(f"📁 数据库路径: {self.db_path}")
     
     async def initialize(self):

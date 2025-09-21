@@ -186,6 +186,10 @@ class ConnectionManager:
             await websocket.send_text(json.dumps(message, ensure_ascii=False))
         except Exception as e:
             print(f"❌ 发送消息失败: {e}")
+            # 如果发送失败，从活跃连接中移除这个WebSocket
+            if websocket in self.active_connections:
+                self.disconnect(websocket)
+            raise  # 重新抛出异常，让调用者知道发送失败
 
 manager = ConnectionManager()
 
@@ -278,8 +282,13 @@ async def websocket_chat(websocket: WebSocket):
                     # 流式处理并推送AI响应
                     try:
                         async for response_chunk in mcp_agent.chat_stream(user_input, history=history, session_id=current_session_id):
-                            # 转发给客户端
-                            await manager.send_personal_message(response_chunk, websocket)
+                            # 转发给客户端，添加连接检查
+                            try:
+                                await manager.send_personal_message(response_chunk, websocket)
+                            except Exception as send_error:
+                                print(f"❌ 发送消息失败: {send_error}")
+                                # 如果发送失败，说明连接已断开，退出流式处理
+                                break
                             
                             # 收集不同类型的响应数据
                             chunk_type = response_chunk.get("type")
@@ -633,12 +642,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     """获取当前用户信息"""
     try:
         return {
-            "success": True,
-            "user": {
-                "id": current_user["user_id"],
-                "username": current_user["username"],
-                "email": current_user["email"]
-            }
+            "id": current_user["user_id"],
+            "username": current_user["username"],
+            "email": current_user["email"]
         }
     except Exception as e:
         print(f"❌ 获取用户信息API错误: {e}")

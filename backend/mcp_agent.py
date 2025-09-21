@@ -307,7 +307,6 @@ class WebMCPAgent:
             self.server_configs = mcp_config.get("servers", {})
 
             # 允许没有外部MCP服务器
-            # 允许没有外部MCP服务器
             if not self.server_configs:
                 print("⚠️ 没有配置外部MCP服务器")
                 self.server_configs = {}
@@ -434,8 +433,6 @@ class WebMCPAgent:
     def _get_stream_system_prompt(self) -> str:
         """保持接口以兼容旧调用，但当前不再使用流式回答提示词。"""
         return ""
-        """保持接口以兼容旧调用，但当前不再使用流式回答提示词。"""
-        return ""
 
     def _sanitize_and_uniq_tool_name(self, name: str) -> str:
         """将工具名规范为 ^[a-zA-Z0-9_-]+$，并避免重名冲突。"""
@@ -466,11 +463,6 @@ class WebMCPAgent:
                     self._current_session_id_ctx.set(session_id)
                 except Exception:
                     pass
-            if session_id:
-                try:
-                    self._current_session_id_ctx.set(session_id)
-                except Exception:
-                    pass
             print(f"🤖 开始处理用户输入: {user_input[:50]}...")
             yield {"type": "status", "content": "开始生成..."}
 
@@ -495,7 +487,6 @@ class WebMCPAgent:
             shared_history.append({"role": "user", "content": user_input})
 
             max_rounds = 25
-            max_rounds = 25
             round_index = 0
             # 合并两阶段输出为同一条消息：在整个会话回答期间仅发送一次 start，最后一次性 end
             combined_response_started = False
@@ -503,7 +494,6 @@ class WebMCPAgent:
                 round_index += 1
                 print(f"🧠 第 {round_index} 轮推理 (双实例：判定工具 + 纯流式回答)...")
 
-                # 2) 使用带工具实例做"流式判定"：
                 # 2) 使用带工具实例做"流式判定"：
                 tools_messages = [{"role": "system", "content": self._get_tools_system_prompt()}] + shared_history
                 tool_calls_check = None
@@ -529,10 +519,11 @@ class WebMCPAgent:
                                     combined_response_started = True
                                 response_started = True
                                 buffered_chunks.append(content_piece)
-                                try:
-                                    print(f"📤 [判定LLM流] {content_piece}")
-                                except Exception:
-                                    pass
+                                # 注释掉调试输出，避免日志过多
+                                # try:
+                                #     print(f"📤 [判定LLM流] {content_piece}")
+                                # except Exception:
+                                #     pass
                                 yield {"type": "ai_response_chunk", "content": content_piece}
                         elif ev == "on_chat_model_end":
                             data = event.get("data", {})
@@ -547,9 +538,7 @@ class WebMCPAgent:
                                 content_preview = ""
                 except Exception as e:
                     print(f"⚠️ 工具判定(流式)失败：{e}")
-                    print(f"⚠️ 工具判定(流式)失败：{e}")
                     tool_calls_check = None
-                    content_preview = ""
                     content_preview = ""
 
                 if tool_calls_check:
@@ -565,11 +554,9 @@ class WebMCPAgent:
                         shared_history.append({
                             "role": "assistant",
                             "content": "",
-                            "content": "",
                             "tool_calls": tool_calls_to_run
                         })
                     except Exception:
-                        shared_history.append({"role": "assistant", "content": ""})
                         shared_history.append({"role": "assistant", "content": ""})
 
                     # 执行工具（非流式）
@@ -657,13 +644,6 @@ class WebMCPAgent:
                     yield {"type": "ai_response_end", "content": ""}
                 return
 
-            # 轮次耗尽：直接返回提示信息
-            print(f"⚠️ 达到最大推理轮数({max_rounds})，直接返回提示信息")
-            final_text = "已达到最大推理轮数，请缩小问题范围或稍后重试。"
-            yield {"type": "ai_response_start", "content": "AI正在回复..."}
-            yield {"type": "ai_response_chunk", "content": final_text}
-            yield {"type": "ai_response_end", "content": final_text}
-            return
             # 轮次耗尽：直接返回提示信息
             print(f"⚠️ 达到最大推理轮数({max_rounds})，直接返回提示信息")
             final_text = "已达到最大推理轮数，请缩小问题范围或稍后重试。"
