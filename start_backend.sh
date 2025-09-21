@@ -93,8 +93,14 @@ main() {
     print_message $BLUE "启动后端服务 (端口: 8003)..."
     cd "$BACKEND_DIR"
     
-    # 使用conda run启动服务，并立即分离进程
-    nohup bash -c "conda run -n ai-web-mcpmode uvicorn main:app --reload --host 0.0.0.0 --port 8003" > "$BACKEND_LOG_FILE" 2>&1 &
+    # 激活conda环境并启动服务
+    source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/anaconda3/etc/profile.d/conda.sh 2>/dev/null || {
+        print_message $RED "错误: 无法找到conda，请确保已安装Anaconda或Miniconda"
+        exit 1
+    }
+    
+    # 使用nohup和bash -c来启动服务，确保环境正确激活
+    nohup bash -c "source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/anaconda3/etc/profile.d/conda.sh 2>/dev/null; conda activate ai-web-mcpmode && uvicorn main:app --reload --host 0.0.0.0 --port 8003" > "$BACKEND_LOG_FILE" 2>&1 &
     local backend_pid=$!
     echo $backend_pid > "$BACKEND_PID_FILE"
     
