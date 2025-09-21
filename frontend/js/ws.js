@@ -242,6 +242,11 @@ class WebSocketManager {
             this.ws = null;
         }
         
+        // 重置状态，允许重新连接
+        this.isInitialized = false;
+        this.reconnectAttempts = 0;
+        this.isConnecting = false;
+        
         console.log('👋 WebSocket 连接已手动关闭');
     }
     

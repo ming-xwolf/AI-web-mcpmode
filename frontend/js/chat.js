@@ -80,15 +80,10 @@ class ChatApp {
         if (this.clearChatBtn) {
             this.clearChatBtn.addEventListener('click', () => this.clearChat());
         }
-        // 新建对话：仅清屏，不删除历史
+        // 新建对话：清屏并重新建立连接
         if (this.startNewChatBtn) {
-            this.startNewChatBtn.addEventListener('click', () => {
-                // 直接恢复预缓存的欢迎卡片模板
-                this.chatMessages.innerHTML = this.welcomeHTML || this.chatMessages.innerHTML;
-                this.thinkingFlow.clear();
-                this.currentAIMessage = null;
-                this.updateSendButton();
-                this.scrollToBottom();
+            this.startNewChatBtn.addEventListener('click', async () => {
+                await this.startNewChat();
             });
         }
         
@@ -482,8 +477,26 @@ class ChatApp {
     }
     
     showStatus(content) {
-        // 可以在这里显示状态信息，暂时用console.log
         console.log('📊 状态:', content);
+        
+        // 创建状态提示元素
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'message ai status-message';
+        statusDiv.innerHTML = `
+            <div class="message-bubble" style="background: rgba(56, 178, 172, 0.1); border-color: rgba(56, 178, 172, 0.3); color: #38b2ac;">
+                ℹ️ ${this.escapeHtml(content)}
+            </div>
+        `;
+        
+        this.chatMessages.appendChild(statusDiv);
+        this.scrollToBottom();
+        
+        // 3秒后自动移除状态提示
+        setTimeout(() => {
+            if (statusDiv.parentNode) {
+                statusDiv.remove();
+            }
+        }, 3000);
     }
     
 
@@ -654,6 +667,51 @@ class ChatApp {
         this.scrollToBottom();
     }
     
+    async startNewChat() {
+        console.log('🆕 开始新建对话...');
+        
+        try {
+            // 1. 清空界面
+            this.chatMessages.innerHTML = this.welcomeHTML || '';
+            this.thinkingFlow.clear();
+            this.currentAIMessage = null;
+            this.currentAIContent = '';
+            
+            // 2. 重置会话ID
+            this.sessionId = null;
+            
+            // 3. 关闭当前WebSocket连接
+            if (this.wsManager) {
+                this.wsManager.close();
+                // 等待一下确保连接完全关闭
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // 4. 重新建立WebSocket连接以获取新的会话ID
+            this.showLoading('正在建立新连接...');
+            this.updateConnectionStatus('connecting');
+            
+            // 重新初始化WebSocket管理器
+            this.wsManager = new WebSocketManager();
+            this.setupWebSocket();
+            await this.connectWebSocket();
+            
+            console.log('✅ 新建对话完成，新会话ID:', this.sessionId);
+            
+            // 5. 更新UI状态
+            this.updateSendButton();
+            this.scrollToBottom();
+            
+            // 6. 显示成功提示
+            this.showStatus('新对话已创建');
+            
+        } catch (error) {
+            console.error('❌ 新建对话失败:', error);
+            this.hideLoading();
+            this.showError('新建对话失败，请刷新页面重试');
+        }
+    }
+
     clearChat() {
         // 清空消息区域，保留欢迎消息
         const welcomeMessage = this.chatMessages.querySelector('.welcome-message');

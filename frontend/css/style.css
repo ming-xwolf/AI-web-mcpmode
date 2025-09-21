@@ -1651,3 +1651,29 @@ body {
         background: transparent;
     }
 }
+
+/* 状态消息样式 */
+.status-message {
+    opacity: 0;
+    animation: fadeInUp 0.3s ease forwards;
+}
+
+.status-message .message-bubble {
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin: 4px 0;
+    text-align: center;
+    font-weight: 500;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
