@@ -8,7 +8,6 @@ LICENSE*
 .env
 .env.local
 .env.*.local
-config.json
 
 # 临时文件
 *.tmp
