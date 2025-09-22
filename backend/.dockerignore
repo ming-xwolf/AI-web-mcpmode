@@ -1,4 +1,4 @@
-# Python相关
+# Python缓存文件
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,28 +25,6 @@ venv/
 env/
 ENV/
 
-# 数据库文件
-*.db
-*.sqlite
-*.sqlite3
-
-# 测试相关
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# 日志文件
-*.log
-logs/
-
-# 临时文件
-*.tmp
-*.temp
-.DS_Store
-Thumbs.db
-
 # IDE文件
 .vscode/
 .idea/
@@ -54,19 +32,50 @@ Thumbs.db
 *.swo
 *~
 
+# 测试文件
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# 文档
+*.md
+docs/
+README*
+
 # Git相关
-.git
+.git/
 .gitignore
 
-# 环境文件
+# 环境变量文件
 .env
 .env.local
 .env.*.local
 
-# 文档
-*.md
-README*
+# 日志文件
+*.log
+logs/
+
+# 数据文件
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 临时文件
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
 
 # Docker相关
 Dockerfile*
 .dockerignore
+docker-compose*.yml
+
+# 其他
+.coverage
+htmlcov/
+.tox/
+.cache
