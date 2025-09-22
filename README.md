@@ -61,6 +61,7 @@ pip install -r requirements.txt
 
 在项目根目录创建 `.env`（或复制 `.env.example` 为 `.env`）并填写：
 
+**单模型配置（简单模式）：**
 ```env
 # OpenAI/兼容接口配置
 OPENAI_API_KEY=your-api-key-here
@@ -72,6 +73,34 @@ OPENAI_TIMEOUT=60
 # 后端端口（可选，默认8003，与前端配置保持一致）
 BACKEND_PORT=8003
 ```
+
+**多模型配置（高级模式）：**
+```env
+# 多模型配置
+LLM_PROFILES=default,qwen3,deepseek
+LLM_DEFAULT=qwen3
+
+# 阿里云百炼千问3配置
+LLM_QWEN3_LABEL=通义千问3
+LLM_QWEN3_API_KEY=your_aliyun_dashscope_api_key_here
+LLM_QWEN3_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_QWEN3_MODEL=qwen-plus
+LLM_QWEN3_TEMPERATURE=0.2
+LLM_QWEN3_TIMEOUT=60
+
+# DeepSeek模型配置
+LLM_DEEPSEEK_LABEL=DeepSeek
+LLM_DEEPSEEK_API_KEY=your_deepseek_api_key_here
+LLM_DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+LLM_DEEPSEEK_MODEL=deepseek-chat
+LLM_DEEPSEEK_TEMPERATURE=0.2
+LLM_DEEPSEEK_TIMEOUT=60
+
+# 后端端口
+BACKEND_PORT=8003
+```
+
+> 💡 **多模型支持**：项目支持同时配置多个AI模型，用户可以在前端界面中动态切换。详细配置说明请参考 [多模型配置文档](MULTI_MODEL_CONFIG.md) 和 [阿里云千问3配置指南](ALIYUN_QWEN3_SETUP.md)。
 
 #### 配置MCP服务器 (可选)
 
