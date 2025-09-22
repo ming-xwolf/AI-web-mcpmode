@@ -99,6 +99,24 @@ main() {
         exit 1
     }
     
+    # 激活conda环境
+    conda activate ai-web-mcpmode || {
+        print_message $RED "错误: 无法激活conda环境 ai-web-mcpmode"
+        exit 1
+    }
+    
+    # 检查并安装依赖
+    print_message $BLUE "检查Python依赖..."
+    if [ -f "$BACKEND_DIR/requirements.txt" ]; then
+        print_message $BLUE "安装/更新Python依赖包..."
+        pip install -r "$BACKEND_DIR/requirements.txt" --quiet || {
+            print_message $YELLOW "警告: 部分依赖安装可能失败，但继续启动服务"
+        }
+        print_message $GREEN "依赖检查完成"
+    else
+        print_message $YELLOW "警告: 未找到 requirements.txt 文件"
+    fi
+    
     # 使用nohup和bash -c来启动服务，确保环境正确激活
     nohup bash -c "source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/anaconda3/etc/profile.d/conda.sh 2>/dev/null; conda activate ai-web-mcpmode && uvicorn main:app --reload --host 0.0.0.0 --port 8003" > "$BACKEND_LOG_FILE" 2>&1 &
     local backend_pid=$!
