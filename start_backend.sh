@@ -99,11 +99,24 @@ main() {
         exit 1
     }
     
-    # 激活conda环境
-    conda activate ai-web-mcpmode || {
-        print_message $RED "错误: 无法激活conda环境 ai-web-mcpmode"
-        exit 1
-    }
+    # 检查并创建conda环境
+    if ! conda activate ai-web-mcpmode 2>/dev/null; then
+        print_message $YELLOW "conda环境 ai-web-mcpmode 不存在，正在创建..."
+        conda create -n ai-web-mcpmode python=3.11 -y || {
+            print_message $RED "错误: 无法创建conda环境 ai-web-mcpmode"
+            exit 1
+        }
+        print_message $GREEN "conda环境 ai-web-mcpmode 创建成功"
+        
+        # 重新激活新创建的环境
+        conda activate ai-web-mcpmode || {
+            print_message $RED "错误: 无法激活新创建的conda环境 ai-web-mcpmode"
+            exit 1
+        }
+        print_message $GREEN "conda环境 ai-web-mcpmode 激活成功"
+    else
+        print_message $GREEN "conda环境 ai-web-mcpmode 已存在并激活成功"
+    fi
     
     # 检查并安装依赖
     print_message $BLUE "检查Python依赖..."
