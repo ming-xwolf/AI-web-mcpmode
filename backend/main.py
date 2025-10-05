@@ -330,6 +330,10 @@ async def websocket_chat(websocket: WebSocket):
                                     "progress": response_chunk.get("progress")
                                 }
                                 conversation_data["mcp_tools_called"].append(tool_call)
+                                try:
+                                    print(f"🔧 MCP工具开始: {tool_call['tool_name']} id={tool_call['tool_id']} args={tool_call['tool_args']}")
+                                except Exception:
+                                    pass
                             
                             elif chunk_type == "tool_end":
                                 # 记录工具执行结果
@@ -340,6 +344,13 @@ async def websocket_chat(websocket: WebSocket):
                                     "success": True
                                 }
                                 conversation_data["mcp_results"].append(tool_result)
+                                try:
+                                    preview = str(tool_result.get("result"))
+                                    if len(preview) > 300:
+                                        preview = preview[:300] + "..."
+                                    print(f"✅ MCP工具完成: {tool_result['tool_name']} id={tool_result['tool_id']} resultPreview={preview}")
+                                except Exception:
+                                    pass
                             
                             elif chunk_type == "tool_error":
                                 # 记录工具执行错误
@@ -349,6 +360,10 @@ async def websocket_chat(websocket: WebSocket):
                                     "success": False
                                 }
                                 conversation_data["mcp_results"].append(tool_error)
+                                try:
+                                    print(f"❌ MCP工具错误: id={tool_error['tool_id']} error={tool_error['error']}")
+                                except Exception:
+                                    pass
                             
                             elif chunk_type == "ai_response_chunk":
                                 # 收集AI回复内容片段

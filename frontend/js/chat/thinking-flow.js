@@ -230,6 +230,8 @@ class ThinkingFlow {
         if (toolsContainers.length === 0) return;
         const toolsContainer = toolsContainers[toolsContainers.length - 1];
 
+        // 保持默认折叠策略，不自动展开
+
         const toolDiv = document.createElement('div');
         toolDiv.className = 'thinking-tool executing';
         toolDiv.id = `thinking-tool-${data.tool_id}`;
@@ -264,6 +266,9 @@ class ThinkingFlow {
         let statusIcon = '';
         let statusText = '';
         let resultSection = '';
+        const resultText = typeof data.result === 'string' ? data.result : (data.result ? JSON.stringify(data.result) : '');
+        const urlMatch = typeof resultText === 'string' ? resultText.match(/https?:[^\s"'<>]+/i) : null;
+        const isImageLike = !!(urlMatch && (urlMatch[0].startsWith('http://') || urlMatch[0].startsWith('https://')));
 
         if (status === 'completed') {
             statusIcon = '<span class="tool-check">✓</span>';
@@ -272,9 +277,9 @@ class ThinkingFlow {
             
             // 添加结果显示
             const resultContent = this.formatToolResult(data.result);
-            const resultLength = data.result.length;
+            const resultLength = (typeof data.result === 'string' ? data.result.length : JSON.stringify(data.result || '').length);
             const resultSizeText = this.formatDataSize(resultLength);
-            const isLongContent = resultLength > 200;
+            const isLongContent = isImageLike ? false : resultLength > 200;
 
             resultSection = `
                 <div class="tool-result-header">
@@ -327,7 +332,7 @@ class ThinkingFlow {
         
         if (allTools.length > 0 && allTools.length === completedTools.length) {
             this.updateThinkingStage('tools_completed', '工具执行完成', '正在综合分析结果并准备回复...');
-            // 完成后自动折叠为紧凑
+            // 完成后仍按默认策略折叠
             const flowId = this.currentThinkingFlow.id;
             setTimeout(() => this.toggleThinkingFlow(flowId, true), 800);
         }
@@ -409,6 +414,63 @@ class ThinkingFlow {
     }
     
     formatToolResult(result) {
+        // 渲染工具结果
+        // 图片/URL 优先识别
+        try {
+            const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+            if (parsed && typeof parsed === 'object') {
+                const maybeUrl = parsed.url || parsed.imageUrl || parsed.resultObj || parsed.image || parsed.img;
+                if (typeof maybeUrl === 'string' && (maybeUrl.startsWith('http://') || maybeUrl.startsWith('https://') || maybeUrl.startsWith('data:image'))) {
+                    const safeUrl = this.appInstance.escapeHtml(maybeUrl);
+                    const altText = this.appInstance.escapeHtml(parsed.title || 'chart');
+                    return `
+                        <div class="tool-image-result">
+                            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+                                <img src="${safeUrl}" alt="${altText}" style="max-width:100%;height:auto;border:1px solid #eee;border-radius:8px;" />
+                            </a>
+                            <div style="margin-top:6px;word-break:break-all;">
+                                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>
+                            </div>
+                        </div>`;
+                }
+                // AntV 私有部署返回结构: { success, resultObj, errorMessage }
+                if (parsed.success && typeof parsed.resultObj === 'string') {
+                    const safeUrl = this.appInstance.escapeHtml(parsed.resultObj);
+                    return `
+                        <div class="tool-image-result">
+                            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+                                <img src="${safeUrl}" alt="chart" style="max-width:100%;height:auto;border:1px solid #eee;border-radius:8px;" />
+                            </a>
+                            <div style="margin-top:6px;word-break:break-all;">
+                                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>
+                            </div>
+                        </div>`;
+                }
+            }
+        } catch (e) {
+            // 忽略解析错误，继续后续逻辑
+        }
+
+        // 若字符串本身就是一个 URL 或 dataURL
+        if (typeof result === 'string') {
+            const trimmed = result.trim();
+            // 提取任意位置的第一个 URL（http/https 或 data:image）
+            const urlRegex = /(https?:[^\s"'<>]+|data:image[^\s"'<>]+)/i;
+            const match = trimmed.match(urlRegex);
+            if (match) {
+                const safeUrl = this.appInstance.escapeHtml(match[0]);
+                return `
+                    <div class="tool-image-result">
+                        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+                            <img src="${safeUrl}" alt="chart" style="max-width:100%;height:auto;border:1px solid #eee;border-radius:8px;" />
+                        </a>
+                        <div style="margin-top:6px;word-break:break-all;">
+                            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>
+                        </div>
+                    </div>`;
+            }
+        }
+
         // 尝试解析为JSON并美化显示
         try {
             const parsed = JSON.parse(result);
@@ -424,8 +486,9 @@ class ThinkingFlow {
             return this.formatTableResult(result);
         }
         
-        // 普通文本，确保正确转义
-        return `<pre>${this.appInstance.escapeHtml(result)}</pre>`;
+        // 普通文本
+        const text = String(result || '');
+        return `<pre>${this.appInstance.escapeHtml(text)}</pre>`;
     }
     
     formatJsonResult(obj) {

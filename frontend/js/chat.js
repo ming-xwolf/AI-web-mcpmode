@@ -138,6 +138,9 @@ class ChatApp {
         this.wsManager.onOpen = () => {
             this.updateConnectionStatus('online');
             this.hideLoading();
+            // 连接成功后恢复发送按钮
+            this.updateSendButton();
+            this.showStatus('已连接');
         };
         
         this.wsManager.onMessage = (data) => {
@@ -146,16 +149,23 @@ class ChatApp {
         
         this.wsManager.onClose = () => {
             this.updateConnectionStatus('offline');
+            // 断线时禁用发送按钮并提示
+            this.updateSendButton();
+            this.showStatus('连接已断开，正在尝试重连...');
         };
         
         this.wsManager.onError = () => {
             this.updateConnectionStatus('offline');
+            // 出错同样禁用发送按钮并给出提示
+            this.updateSendButton();
             this.showError('WebSocket 连接错误');
         };
         
         this.wsManager.onReconnecting = (attempt, maxAttempts) => {
             this.updateConnectionStatus('connecting');
             this.showStatus(`Reconnecting... (${attempt}/${maxAttempts})`);
+            // 重连过程中禁用发送
+            this.updateSendButton();
         };
     }
     
@@ -394,6 +404,24 @@ class ChatApp {
                 
             case 'tool_end':
                 this.thinkingFlow.updateToolInThinking(data, 'completed');
+
+                // 将图片或链接直接插入到AI回答气泡中，便于用户立即查看
+                try {
+                    const raw = data.result;
+                    let urlCandidate = null;
+                    if (typeof raw === 'string') {
+                        const m = raw.match(/(https?:[^\s"'<>]+|data:image[^\s"'<>]+)/i);
+                        if (m) urlCandidate = m[0];
+                    } else if (raw && typeof raw === 'object') {
+                        urlCandidate = raw.url || raw.imageUrl || raw.resultObj || raw.image || raw.img || null;
+                    }
+                    if (typeof urlCandidate === 'string') {
+                        const snippet = `\n\n![chart](${urlCandidate})\n\n${urlCandidate}\n\n`;
+                        this.appendAIResponse(snippet);
+                    }
+                } catch (e) {
+                    console.warn('插入回答框图片失败:', e);
+                }
                 break;
                 
             case 'tool_error':

@@ -427,7 +427,13 @@ class WebMCPAgent:
             "- 不要无节制的调用工具，除非用户明确要求。" + "\n" +
             "- 根据可用工具选择合适的工具来完成任务。" + "\n" +
             "- 不要为'尝试/验证'而随意调用工具；若信息不足，返回不调用工具。" + "\n" +
-            "- 仅在确有必要时，通过 tool_calls 给出函数名与'合法 JSON'参数；不要输出其他内容。" + "\n"
+            "- 仅在确有必要时，通过 tool_calls 给出函数名与'合法 JSON'参数；不要输出其他内容。" + "\n" +
+            # 自选股/用户ID 注入策略
+            "- 重要：当某个工具需要 user_id 参数时，若会话上下文已包含 user_id（由后端记录的当前登录用户），直接使用并不要向用户索要。" + "\n" +
+            "- 若会话中不存在 user_id（用户未登录），不要继续追问用户ID，改为提示用户需要先登录后才能进行与自选股相关的操作。" + "\n"
+            "- 自选股相关任务（如：查询/添加/删除/检查/更新自选股）必须优先调用相应工具，不要用自然语言询问用户ID。" + "\n" +
+            "- 可用的自选股工具：get_user_watchlist、add_to_watchlist、remove_from_watchlist、check_in_watchlist、update_watchlist_item。调用时除业务参数外，其余参数由系统自动补齐。" + "\n" +
+            "- 例：用户说“把茅台加入自选”。请直接调用 add_to_watchlist，参数如 {\"stock_code\": \"600519.SH\", \"stock_name\": \"贵州茅台\"}，不要再向用户确认 user_id。" + "\n"
         )
 
     def _get_stream_system_prompt(self) -> str:
@@ -495,7 +501,36 @@ class WebMCPAgent:
                 print(f"🧠 第 {round_index} 轮推理 (双实例：判定工具 + 纯流式回答)...")
 
                 # 2) 使用带工具实例做"流式判定"：
-                tools_messages = [{"role": "system", "content": self._get_tools_system_prompt()}] + shared_history
+                # 注入会话上下文（如已登录用户），强提示不要向用户索取 user_id
+                session_ctx_for_prompt = {}
+                try:
+                    if session_id and self.session_contexts.get(session_id):
+                        session_ctx_for_prompt = self.session_contexts.get(session_id, {})
+                except Exception:
+                    session_ctx_for_prompt = {}
+
+                context_hint = None
+                try:
+                    uid = session_ctx_for_prompt.get("user_id")
+                    uname = session_ctx_for_prompt.get("username")
+                    if uid is not None and uid != "":
+                        context_hint = (
+                            f"【会话上下文】当前用户已登录：user_id={uid}"
+                            + (f", username={uname}" if uname else "")
+                            + "。凡是需要 user_id 的工具参数，请直接使用该 user_id，不要向用户索取；若无 user_id 才提示需要先登录。"
+                        )
+                    else:
+                        context_hint = (
+                            "【会话上下文】当前会话未登录（无 user_id）。若用户请求的是自选股相关操作，请提示需要先登录后再进行。"
+                        )
+                except Exception:
+                    pass
+
+                base_system = {"role": "system", "content": self._get_tools_system_prompt()}
+                if context_hint:
+                    tools_messages = [base_system, {"role": "system", "content": context_hint}] + shared_history
+                else:
+                    tools_messages = [base_system] + shared_history
                 tool_calls_check = None
                 buffered_chunks: List[str] = []
                 content_preview = ""
@@ -597,6 +632,73 @@ class WebMCPAgent:
                                 yield {"type": "tool_error", "tool_id": tool_id, "error": error_msg}
                                 tool_result = f"错误: {error_msg}"
                             else:
+                                # 在调用工具前，自动为需要用户ID的工具注入当前会话的 user_id
+                                try:
+                                    requires_user_id = False
+                                    required_fields = []
+                                    schema = None
+                                    if hasattr(target_tool, 'args_schema') and target_tool.args_schema:
+                                        if isinstance(target_tool.args_schema, dict):
+                                            schema = target_tool.args_schema
+                                        elif hasattr(target_tool.args_schema, 'model_json_schema'):
+                                            try:
+                                                schema = target_tool.args_schema.model_json_schema()
+                                            except Exception:
+                                                schema = None
+                                    if not schema and hasattr(target_tool, 'tool_call_schema') and target_tool.tool_call_schema:
+                                        schema = target_tool.tool_call_schema
+                                    if not schema and hasattr(target_tool, 'input_schema') and target_tool.input_schema:
+                                        if isinstance(target_tool.input_schema, dict):
+                                            schema = target_tool.input_schema
+                                        elif hasattr(target_tool.input_schema, 'model_json_schema'):
+                                            try:
+                                                schema = target_tool.input_schema.model_json_schema()
+                                            except Exception:
+                                                schema = None
+
+                                    if isinstance(schema, dict):
+                                        required_fields = schema.get('required', []) or []
+                                        if isinstance(required_fields, list) and 'user_id' in required_fields:
+                                            requires_user_id = True
+
+                                    # 兜底：根据工具名识别自选股相关工具
+                                    watchlist_tools = {
+                                        'get_user_watchlist',
+                                        'add_to_watchlist',
+                                        'remove_from_watchlist',
+                                        'update_watchlist_item',
+                                        'check_in_watchlist'
+                                    }
+                                    if target_tool.name in watchlist_tools:
+                                        requires_user_id = True if requires_user_id is False else True
+
+                                    if requires_user_id:
+                                        session_ctx = self.session_contexts.get(session_id or '', {}) if hasattr(self, 'session_contexts') else {}
+                                        current_uid = session_ctx.get('user_id')
+                                        if current_uid is not None and current_uid != "":
+                                            # 强制覆盖为当前登录用户，避免模型误填如用户名导致跨用户查询
+                                            parsed_args['user_id'] = str(current_uid)
+                                        else:
+                                            # 未登录：直接返回提示，不实际调用工具
+                                            login_msg = (
+                                                "您当前未登录，无法访问或修改自选股。\n\n"
+                                                "请先登录账号后再试。若已登录，请确保WebSocket连接携带有效的token。"
+                                            )
+                                            tool_result = {"content": [{"type": "text", "text": login_msg}], "isError": True}
+                                            yield {"type": "tool_end", "tool_id": tool_id, "tool_name": tool_name, "result": str(tool_result)}
+                                            # 写入 tool 消息并跳过真正的工具调用
+                                            shared_history.append({
+                                                "role": "tool",
+                                                "tool_call_id": tool_id,
+                                                "name": tool_name,
+                                                "content": str(tool_result)
+                                            })
+                                            # 继续下一轮推理
+                                            continue
+                                except Exception as _inject_e:
+                                    # 注入失败不影响工具调用，继续原始参数
+                                    print(f"⚠️ user_id 注入检查失败: {_inject_e}")
+
                                 tool_result = await target_tool.ainvoke(parsed_args)
                                 yield {"type": "tool_end", "tool_id": tool_id, "tool_name": tool_name, "result": str(tool_result)}
                                 # 不再支持退出工具模式
